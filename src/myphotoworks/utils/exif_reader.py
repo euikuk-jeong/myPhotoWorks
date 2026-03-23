@@ -5,7 +5,6 @@ from pathlib import Path
 
 import piexif
 
-
 _EXIF_DATE_TAG = piexif.ExifIFD.DateTimeOriginal
 _EXIF_ISO_TAG = piexif.ExifIFD.ISOSpeedRatings
 _EXIF_USER_COMMENT_TAG = piexif.ExifIFD.UserComment

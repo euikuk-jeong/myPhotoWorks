@@ -1,11 +1,10 @@
 """Unit tests for image effect functions."""
 import numpy as np
-import pytest
 from PIL import Image
 
 from myphotoworks.processing.effects import (
-    apply_bw,
     apply_brightness_contrast,
+    apply_bw,
     apply_gaussian,
     apply_level,
     apply_sharpen,
