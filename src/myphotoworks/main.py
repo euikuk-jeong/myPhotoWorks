@@ -1,18 +1,8 @@
 import sys
 
-from PyQt6.QtWidgets import QApplication, QMainWindow, QLabel
-from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import QApplication
 
-
-class MainWindow(QMainWindow):
-    def __init__(self) -> None:
-        super().__init__()
-        self.setWindowTitle("myPhotoWorks")
-        self.resize(900, 600)
-
-        placeholder = QLabel("myPhotoWorks — UI 준비 중")
-        placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.setCentralWidget(placeholder)
+from myphotoworks.ui.main_window import MainWindow
 
 
 def main() -> None:

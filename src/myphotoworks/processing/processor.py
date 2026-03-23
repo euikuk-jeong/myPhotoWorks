@@ -1,7 +1,6 @@
 """ImageProcessor — orchestrates the full effect chain."""
 from __future__ import annotations
 
-import io
 from pathlib import Path
 
 import piexif
@@ -9,7 +8,8 @@ from PIL import Image
 
 from myphotoworks.models.photo_item import PhotoItem
 from myphotoworks.models.settings import AppSettings
-from myphotoworks.processing import effects, resize as resize_mod
+from myphotoworks.processing import effects
+from myphotoworks.processing import resize as resize_mod
 
 
 def process(photo_item: PhotoItem, settings: AppSettings) -> Image.Image:
@@ -63,7 +63,12 @@ def process(photo_item: PhotoItem, settings: AppSettings) -> Image.Image:
     return image
 
 
-def save(image: Image.Image, output_path: Path, settings: AppSettings, source_path: Path | None = None) -> None:
+def save(
+    image: Image.Image,
+    output_path: Path,
+    settings: AppSettings,
+    source_path: Path | None = None,
+) -> None:
     """Save the processed image to output_path.
 
     Preserves EXIF from the source if available.

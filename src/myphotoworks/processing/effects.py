@@ -59,7 +59,9 @@ def apply_sharpen(image: Image.Image, amount: float = 1.0) -> Image.Image:
     radius = 2
     percent = int(amount * 100)
     threshold = 3
-    return image.filter(ImageFilter.UnsharpMask(radius=radius, percent=percent, threshold=threshold))
+    return image.filter(
+        ImageFilter.UnsharpMask(radius=radius, percent=percent, threshold=threshold)
+    )
 
 
 def apply_gaussian(image: Image.Image, radius: float = 1.0) -> Image.Image:

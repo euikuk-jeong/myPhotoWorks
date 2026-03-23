@@ -1,5 +1,4 @@
 """Unit tests for resize utilities."""
-import pytest
 from PIL import Image
 
 from myphotoworks.processing.resize import resize_image
