@@ -1,11 +1,7 @@
-"""SettingsPanel — QTabWidget with all setting tabs.
-
-Tabs: Home | Name | Signature | PPI | Output | Configuration | Help
-Phase 3 fully implements the Home tab and Output tab.
-Remaining tabs show placeholders.
-"""
+"""SettingsPanel — 보정 / 리사이즈 / 출력 3탭."""
 from __future__ import annotations
 
+import copy
 from pathlib import Path
 
 from PyQt6.QtCore import Qt, pyqtSignal
@@ -19,24 +15,25 @@ from PyQt6.QtWidgets import (
     QLabel,
     QLineEdit,
     QPushButton,
+    QRadioButton,
     QSlider,
     QSpinBox,
     QTabWidget,
-    QTextBrowser,
     QVBoxLayout,
     QWidget,
 )
 
-from myphotoworks.models.settings import AppSettings
+from myphotoworks.models.settings import AppSettings, OutputPathMode, ResizeAxis
+
+RESIZE_PRESETS = [1080, 1920, 2048, 2560, 3840]
 
 
 class SettingsPanel(QTabWidget):
-    """Tab widget that owns and exposes AppSettings.
+    """Tab widget owning AppSettings.
 
     Signal
     ------
-    settings_changed(AppSettings)
-        Emitted whenever any setting is modified.
+    settings_changed(AppSettings)  — emitted on any change.
     """
 
     settings_changed = pyqtSignal(object)
@@ -44,276 +41,319 @@ class SettingsPanel(QTabWidget):
     def __init__(self, settings: AppSettings, parent=None) -> None:
         super().__init__(parent)
         self._settings = settings
-
-        self.addTab(self._build_home_tab(), "Home")
-        self.addTab(self._build_placeholder("Name"), "Name")
-        self.addTab(self._build_placeholder("Signature"), "Signature")
-        self.addTab(self._build_placeholder("PPI"), "PPI")
-        self.addTab(self._build_output_tab(), "Output")
-        self.addTab(self._build_placeholder("Configuration"), "Configuration")
-        self.addTab(self._build_help_tab(), "Help")
-
-    # ------------------------------------------------------------------
-    # Public
-    # ------------------------------------------------------------------
+        self.addTab(self._build_effects_tab(), "보정")
+        self.addTab(self._build_resize_tab(), "리사이즈")
+        self.addTab(self._build_output_tab(), "출력")
 
     def settings(self) -> AppSettings:
         return self._settings
 
+    def load_settings(self, settings: AppSettings) -> None:
+        """Replace current settings and refresh all widgets."""
+        self._settings = copy.copy(settings)
+        self._refresh_effects()
+        self._refresh_resize()
+        self._refresh_output()
+
     # ------------------------------------------------------------------
-    # Home Tab
+    # 보정 탭
     # ------------------------------------------------------------------
 
-    def _build_home_tab(self) -> QWidget:
+    def _build_effects_tab(self) -> QWidget:
         tab = QWidget()
         layout = QVBoxLayout(tab)
-        layout.setSpacing(8)
+        layout.setSpacing(10)
+        layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
-        # --- Filter group ---
-        filter_group = QGroupBox("Filter")
-        filter_layout = QVBoxLayout(filter_group)
+        # Auto corrections
+        auto_group = QGroupBox("자동 보정")
+        auto_layout = QVBoxLayout(auto_group)
 
-        # 흑백
-        self._bw_cb = QCheckBox("흑백 조절")
-        self._bw_cb.setChecked(self._settings.bw_enabled)
-        self._bw_cb.toggled.connect(self._on_bw_toggled)
-        filter_layout.addWidget(self._bw_cb)
-
-        # Level
-        level_row = QHBoxLayout()
-        level_row.addWidget(QLabel("Level"))
-        self._level_min_spin = QSpinBox()
-        self._level_min_spin.setRange(0, 254)
-        self._level_min_spin.setValue(self._settings.level_min)
-        self._level_min_spin.valueChanged.connect(self._on_level_changed)
-        level_row.addWidget(self._level_min_spin)
-        level_row.addWidget(QLabel("~"))
-        self._level_max_spin = QSpinBox()
-        self._level_max_spin.setRange(1, 255)
-        self._level_max_spin.setValue(self._settings.level_max)
-        self._level_max_spin.valueChanged.connect(self._on_level_changed)
-        level_row.addWidget(self._level_max_spin)
-        level_row.addStretch()
-        filter_layout.addLayout(level_row)
-
-        layout.addWidget(filter_group)
-
-        # --- Auto correction group ---
-        auto_group = QGroupBox("Auto Correction")
-        auto_layout = QHBoxLayout(auto_group)
-
-        self._auto_level_cb = QCheckBox("Auto Level 조절")
+        self._auto_level_cb = QCheckBox("Auto Level")
         self._auto_level_cb.setChecked(self._settings.auto_level)
-        self._auto_level_cb.toggled.connect(self._on_auto_level_toggled)
+        self._auto_level_cb.toggled.connect(self._on_auto_level)
         auto_layout.addWidget(self._auto_level_cb)
 
-        self._auto_contrast_cb = QCheckBox("Auto Contrast 조절")
+        self._auto_contrast_cb = QCheckBox("Auto Contrast")
         self._auto_contrast_cb.setChecked(self._settings.auto_contrast)
-        self._auto_contrast_cb.toggled.connect(self._on_auto_contrast_toggled)
+        self._auto_contrast_cb.toggled.connect(self._on_auto_contrast)
         auto_layout.addWidget(self._auto_contrast_cb)
 
         layout.addWidget(auto_group)
 
-        # --- Brightness / Contrast group ---
-        bc_group = QGroupBox("Brightness / Contrast")
+        # Brightness / Contrast
+        bc_group = QGroupBox("밝기 / 대비")
         bc_layout = QFormLayout(bc_group)
 
         self._brightness_slider = _LabeledSlider(-100, 100, self._settings.brightness)
-        self._brightness_slider.valueChanged.connect(self._on_brightness_changed)
-        bc_layout.addRow("Brightness", self._brightness_slider)
+        self._brightness_slider.valueChanged.connect(self._on_brightness)
+        bc_layout.addRow("밝기", self._brightness_slider)
 
         self._contrast_slider = _LabeledSlider(-100, 100, self._settings.contrast)
-        self._contrast_slider.valueChanged.connect(self._on_contrast_changed)
-        bc_layout.addRow("Contrast", self._contrast_slider)
+        self._contrast_slider.valueChanged.connect(self._on_contrast)
+        bc_layout.addRow("대비", self._contrast_slider)
 
         layout.addWidget(bc_group)
-
-        # --- Sharpen / Gaussian group ---
-        sg_group = QGroupBox("Sharpen / Gaussian")
-        sg_layout = QFormLayout(sg_group)
-
-        self._sharpen_cb = QCheckBox("Sharpener")
-        self._sharpen_cb.setChecked(self._settings.sharpen_enabled)
-        self._sharpen_cb.toggled.connect(self._on_sharpen_toggled)
-        sg_layout.addRow(self._sharpen_cb)
-
-        self._gaussian_cb = QCheckBox("Gaussi")
-        self._gaussian_cb.setChecked(self._settings.gaussian_enabled)
-        self._gaussian_cb.toggled.connect(self._on_gaussian_toggled)
-        sg_layout.addRow(self._gaussian_cb)
-
-        layout.addWidget(sg_group)
-        layout.addStretch()
-
         return tab
 
+    def _refresh_effects(self) -> None:
+        self._auto_level_cb.setChecked(self._settings.auto_level)
+        self._auto_contrast_cb.setChecked(self._settings.auto_contrast)
+        self._brightness_slider.setValue(self._settings.brightness)
+        self._contrast_slider.setValue(self._settings.contrast)
+
     # ------------------------------------------------------------------
-    # Output Tab
+    # 리사이즈 탭
+    # ------------------------------------------------------------------
+
+    def _build_resize_tab(self) -> QWidget:
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        layout.setSpacing(10)
+        layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+
+        resize_group = QGroupBox("리사이즈 설정")
+        form = QFormLayout(resize_group)
+
+        # 리사이즈 활성화 체크박스
+        self._resize_cb = QCheckBox("리사이즈 적용")
+        self._resize_cb.setChecked(self._settings.resize_enabled)
+        self._resize_cb.toggled.connect(self._on_resize_toggled)
+        form.addRow(self._resize_cb)
+
+        # 기준 축
+        self._axis_combo = QComboBox()
+        self._axis_combo.addItem("긴 축", ResizeAxis.LONG)
+        self._axis_combo.addItem("짧은 축", ResizeAxis.SHORT)
+        idx = 0 if self._settings.resize_axis == ResizeAxis.LONG else 1
+        self._axis_combo.setCurrentIndex(idx)
+        self._axis_combo.currentIndexChanged.connect(self._on_axis_changed)
+        form.addRow("기준 축", self._axis_combo)
+
+        # 픽셀값 — 직접 입력 + 프리셋
+        px_row = QHBoxLayout()
+        self._px_spin = QSpinBox()
+        self._px_spin.setRange(1, 99999)
+        self._px_spin.setValue(self._settings.resize_px)
+        self._px_spin.setSuffix(" px")
+        self._px_spin.valueChanged.connect(self._on_px_changed)
+        px_row.addWidget(self._px_spin)
+
+        self._preset_combo = QComboBox()
+        self._preset_combo.addItem("프리셋")
+        for p in RESIZE_PRESETS:
+            self._preset_combo.addItem(str(p))
+        self._preset_combo.currentIndexChanged.connect(self._on_preset_selected)
+        px_row.addWidget(self._preset_combo)
+
+        form.addRow("픽셀값", px_row)
+        layout.addWidget(resize_group)
+
+        self._update_resize_controls()
+        return tab
+
+    def _refresh_resize(self) -> None:
+        self._resize_cb.setChecked(self._settings.resize_enabled)
+        idx = 0 if self._settings.resize_axis == ResizeAxis.LONG else 1
+        self._axis_combo.setCurrentIndex(idx)
+        self._px_spin.setValue(self._settings.resize_px)
+        self._update_resize_controls()
+
+    def _update_resize_controls(self) -> None:
+        enabled = self._settings.resize_enabled
+        self._axis_combo.setEnabled(enabled)
+        self._px_spin.setEnabled(enabled)
+        self._preset_combo.setEnabled(enabled)
+
+    # ------------------------------------------------------------------
+    # 출력 탭
     # ------------------------------------------------------------------
 
     def _build_output_tab(self) -> QWidget:
         tab = QWidget()
-        layout = QFormLayout(tab)
+        layout = QVBoxLayout(tab)
         layout.setSpacing(10)
+        layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
-        # Output directory
-        dir_row = QHBoxLayout()
-        self._output_dir_edit = QLineEdit(str(self._settings.output_dir))
-        self._output_dir_edit.setReadOnly(True)
-        dir_row.addWidget(self._output_dir_edit)
+        # 저장 경로
+        path_group = QGroupBox("저장 경로")
+        path_layout = QVBoxLayout(path_group)
+
+        self._radio_first = QRadioButton("첫 번째 파일 기준 output 폴더")
+        self._radio_per = QRadioButton("각 파일별 output 폴더")
+        self._radio_custom = QRadioButton("직접 지정")
+
+        mode = self._settings.output_path_mode
+        self._radio_first.setChecked(mode == OutputPathMode.FIRST_FILE)
+        self._radio_per.setChecked(mode == OutputPathMode.PER_FILE)
+        self._radio_custom.setChecked(mode == OutputPathMode.CUSTOM)
+
+        self._radio_first.toggled.connect(self._on_path_mode_changed)
+        self._radio_per.toggled.connect(self._on_path_mode_changed)
+        self._radio_custom.toggled.connect(self._on_path_mode_changed)
+
+        path_layout.addWidget(self._radio_first)
+        path_layout.addWidget(self._radio_per)
+        path_layout.addWidget(self._radio_custom)
+
+        custom_row = QHBoxLayout()
+        self._custom_dir_edit = QLineEdit(str(self._settings.output_custom_dir))
+        self._custom_dir_edit.setReadOnly(True)
+        custom_row.addWidget(self._custom_dir_edit)
         browse_btn = QPushButton("...")
         browse_btn.setFixedWidth(30)
-        browse_btn.clicked.connect(self._on_browse_output_dir)
-        dir_row.addWidget(browse_btn)
-        layout.addRow("출력 경로", dir_row)
+        browse_btn.clicked.connect(self._on_browse_custom_dir)
+        custom_row.addWidget(browse_btn)
+        path_layout.addLayout(custom_row)
 
-        # Format
-        self._format_combo = QComboBox()
-        self._format_combo.addItems(["JPEG", "PNG"])
-        self._format_combo.setCurrentText(self._settings.output_format)
-        self._format_combo.currentTextChanged.connect(self._on_format_changed)
-        layout.addRow("포맷", self._format_combo)
+        layout.addWidget(path_group)
+        self._update_custom_dir_controls()
 
-        # Quality
-        self._quality_slider = _LabeledSlider(1, 100, self._settings.output_quality)
-        self._quality_slider.valueChanged.connect(self._on_quality_changed)
-        layout.addRow("품질 (JPEG)", self._quality_slider)
+        # 파일명
+        name_group = QGroupBox("파일명")
+        name_form = QFormLayout(name_group)
 
-        # Resize
-        resize_row = QHBoxLayout()
-        self._resize_w_spin = QSpinBox()
-        self._resize_w_spin.setRange(0, 9999)
-        self._resize_w_spin.setValue(self._settings.resize_width)
-        self._resize_w_spin.setSuffix(" px")
-        self._resize_w_spin.valueChanged.connect(self._on_resize_changed)
-        resize_row.addWidget(QLabel("W"))
-        resize_row.addWidget(self._resize_w_spin)
+        self._prefix_edit = QLineEdit(self._settings.output_prefix)
+        self._prefix_edit.setPlaceholderText("없음")
+        self._prefix_edit.textChanged.connect(self._on_prefix_changed)
+        name_form.addRow("Prefix", self._prefix_edit)
 
-        self._resize_h_spin = QSpinBox()
-        self._resize_h_spin.setRange(0, 9999)
-        self._resize_h_spin.setValue(self._settings.resize_height)
-        self._resize_h_spin.setSuffix(" px")
-        self._resize_h_spin.valueChanged.connect(self._on_resize_changed)
-        resize_row.addWidget(QLabel("H"))
-        resize_row.addWidget(self._resize_h_spin)
+        self._suffix_edit = QLineEdit(self._settings.output_suffix)
+        self._suffix_edit.setPlaceholderText("없음")
+        self._suffix_edit.textChanged.connect(self._on_suffix_changed)
+        name_form.addRow("Suffix", self._suffix_edit)
 
-        self._resize_cb = QCheckBox("리사이즈")
-        self._resize_cb.setChecked(self._settings.resize_enabled)
-        self._resize_cb.toggled.connect(self._on_resize_toggled)
-        resize_row.addWidget(self._resize_cb)
-        layout.addRow("크기", resize_row)
+        layout.addWidget(name_group)
 
+        # 품질
+        quality_group = QGroupBox("JPG 품질")
+        quality_layout = QHBoxLayout(quality_group)
+
+        self._quality_slider = QSlider(Qt.Orientation.Horizontal)
+        self._quality_slider.setRange(1, 100)
+        self._quality_slider.setValue(self._settings.output_quality)
+        self._quality_slider.valueChanged.connect(self._on_quality_slider)
+
+        self._quality_spin = QSpinBox()
+        self._quality_spin.setRange(1, 100)
+        self._quality_spin.setValue(self._settings.output_quality)
+        self._quality_spin.setSuffix(" %")
+        self._quality_spin.setFixedWidth(65)
+        self._quality_spin.valueChanged.connect(self._on_quality_spin)
+
+        quality_layout.addWidget(self._quality_slider)
+        quality_layout.addWidget(self._quality_spin)
+
+        layout.addWidget(quality_group)
         return tab
 
-    # ------------------------------------------------------------------
-    # Help Tab
-    # ------------------------------------------------------------------
+    def _refresh_output(self) -> None:
+        mode = self._settings.output_path_mode
+        self._radio_first.setChecked(mode == OutputPathMode.FIRST_FILE)
+        self._radio_per.setChecked(mode == OutputPathMode.PER_FILE)
+        self._radio_custom.setChecked(mode == OutputPathMode.CUSTOM)
+        self._custom_dir_edit.setText(str(self._settings.output_custom_dir))
+        self._prefix_edit.setText(self._settings.output_prefix)
+        self._suffix_edit.setText(self._settings.output_suffix)
+        self._quality_slider.setValue(self._settings.output_quality)
+        self._quality_spin.setValue(self._settings.output_quality)
+        self._update_custom_dir_controls()
 
-    def _build_help_tab(self) -> QWidget:
-        tab = QWidget()
-        layout = QVBoxLayout(tab)
-        browser = QTextBrowser()
-        browser.setHtml("""
-        <h3>myPhotoWorks 사용법</h3>
-        <ol>
-          <li><b>Choose</b> 버튼으로 사진을 선택하거나 왼쪽 패널에 드래그&드롭</li>
-          <li>Home 탭에서 보정 옵션 설정</li>
-          <li>Output 탭에서 출력 경로·포맷·크기 설정</li>
-          <li><b>처리 시작</b> 버튼으로 일괄 처리</li>
-        </ol>
-        <h4>단축키</h4>
-        <ul>
-          <li>Ctrl+O : 사진 열기</li>
-          <li>Space : 프리뷰 열기</li>
-        </ul>
-        """)
-        layout.addWidget(browser)
-        return tab
+    def _update_custom_dir_controls(self) -> None:
+        enabled = self._settings.output_path_mode == OutputPathMode.CUSTOM
+        self._custom_dir_edit.setEnabled(enabled)
 
     # ------------------------------------------------------------------
-    # Placeholder
+    # Slots — effects
     # ------------------------------------------------------------------
 
-    def _build_placeholder(self, name: str) -> QWidget:
-        tab = QWidget()
-        layout = QVBoxLayout(tab)
-        label = QLabel(f"{name} 탭 — 구현 예정")
-        label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(label)
-        return tab
-
-    # ------------------------------------------------------------------
-    # Slots
-    # ------------------------------------------------------------------
-
-    def _emit(self) -> None:
-        self.settings_changed.emit(self._settings)
-
-    def _on_bw_toggled(self, checked: bool) -> None:
-        self._settings.bw_enabled = checked
-        self._emit()
-
-    def _on_level_changed(self) -> None:
-        mn = self._level_min_spin.value()
-        mx = self._level_max_spin.value()
-        if mn >= mx:
-            return
-        self._settings.level_min = mn
-        self._settings.level_max = mx
-        self._emit()
-
-    def _on_auto_level_toggled(self, checked: bool) -> None:
+    def _on_auto_level(self, checked: bool) -> None:
         self._settings.auto_level = checked
         self._emit()
 
-    def _on_auto_contrast_toggled(self, checked: bool) -> None:
+    def _on_auto_contrast(self, checked: bool) -> None:
         self._settings.auto_contrast = checked
         self._emit()
 
-    def _on_brightness_changed(self, value: int) -> None:
+    def _on_brightness(self, value: int) -> None:
         self._settings.brightness = value
         self._emit()
 
-    def _on_contrast_changed(self, value: int) -> None:
+    def _on_contrast(self, value: int) -> None:
         self._settings.contrast = value
         self._emit()
 
-    def _on_sharpen_toggled(self, checked: bool) -> None:
-        self._settings.sharpen_enabled = checked
-        if checked:
-            self._gaussian_cb.setChecked(False)
-        self._emit()
-
-    def _on_gaussian_toggled(self, checked: bool) -> None:
-        self._settings.gaussian_enabled = checked
-        if checked:
-            self._sharpen_cb.setChecked(False)
-        self._emit()
-
-    def _on_browse_output_dir(self) -> None:
-        path = QFileDialog.getExistingDirectory(self, "출력 폴더 선택",
-                                                str(self._settings.output_dir))
-        if path:
-            self._settings.output_dir = Path(path)
-            self._output_dir_edit.setText(path)
-            self._emit()
-
-    def _on_format_changed(self, fmt: str) -> None:
-        self._settings.output_format = fmt
-        self._emit()
-
-    def _on_quality_changed(self, value: int) -> None:
-        self._settings.output_quality = value
-        self._emit()
+    # ------------------------------------------------------------------
+    # Slots — resize
+    # ------------------------------------------------------------------
 
     def _on_resize_toggled(self, checked: bool) -> None:
         self._settings.resize_enabled = checked
+        self._update_resize_controls()
         self._emit()
 
-    def _on_resize_changed(self) -> None:
-        self._settings.resize_width = self._resize_w_spin.value()
-        self._settings.resize_height = self._resize_h_spin.value()
+    def _on_axis_changed(self, index: int) -> None:
+        self._settings.resize_axis = self._axis_combo.currentData()
         self._emit()
+
+    def _on_px_changed(self, value: int) -> None:
+        self._settings.resize_px = value
+        self._emit()
+
+    def _on_preset_selected(self, index: int) -> None:
+        if index == 0:
+            return
+        px = RESIZE_PRESETS[index - 1]
+        self._px_spin.setValue(px)
+        self._preset_combo.setCurrentIndex(0)
+
+    # ------------------------------------------------------------------
+    # Slots — output
+    # ------------------------------------------------------------------
+
+    def _on_path_mode_changed(self) -> None:
+        if self._radio_first.isChecked():
+            self._settings.output_path_mode = OutputPathMode.FIRST_FILE
+        elif self._radio_per.isChecked():
+            self._settings.output_path_mode = OutputPathMode.PER_FILE
+        else:
+            self._settings.output_path_mode = OutputPathMode.CUSTOM
+        self._update_custom_dir_controls()
+        self._emit()
+
+    def _on_browse_custom_dir(self) -> None:
+        path = QFileDialog.getExistingDirectory(
+            self, "출력 폴더 선택", str(self._settings.output_custom_dir)
+        )
+        if path:
+            self._settings.output_custom_dir = Path(path)
+            self._custom_dir_edit.setText(path)
+            self._emit()
+
+    def _on_prefix_changed(self, text: str) -> None:
+        self._settings.output_prefix = text
+        self._emit()
+
+    def _on_suffix_changed(self, text: str) -> None:
+        self._settings.output_suffix = text
+        self._emit()
+
+    def _on_quality_slider(self, value: int) -> None:
+        self._quality_spin.blockSignals(True)
+        self._quality_spin.setValue(value)
+        self._quality_spin.blockSignals(False)
+        self._settings.output_quality = value
+        self._emit()
+
+    def _on_quality_spin(self, value: int) -> None:
+        self._quality_slider.blockSignals(True)
+        self._quality_slider.setValue(value)
+        self._quality_slider.blockSignals(False)
+        self._settings.output_quality = value
+        self._emit()
+
+    def _emit(self) -> None:
+        self.settings_changed.emit(self._settings)
 
 
 # ---------------------------------------------------------------------------
@@ -321,7 +361,7 @@ class SettingsPanel(QTabWidget):
 # ---------------------------------------------------------------------------
 
 class _LabeledSlider(QWidget):
-    """Horizontal slider with a numeric label showing the current value."""
+    """Horizontal slider with a numeric spin box showing the current value."""
 
     valueChanged = pyqtSignal(int)
 
@@ -334,18 +374,36 @@ class _LabeledSlider(QWidget):
         self._slider.setRange(minimum, maximum)
         self._slider.setValue(value)
 
-        self._label = QLabel(str(value))
-        self._label.setFixedWidth(36)
-        self._label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self._spin = QSpinBox()
+        self._spin.setRange(minimum, maximum)
+        self._spin.setValue(value)
+        self._spin.setFixedWidth(52)
 
         layout.addWidget(self._slider)
-        layout.addWidget(self._label)
+        layout.addWidget(self._spin)
 
-        self._slider.valueChanged.connect(self._on_value_changed)
+        self._slider.valueChanged.connect(self._on_slider)
+        self._spin.valueChanged.connect(self._on_spin)
 
     def value(self) -> int:
         return self._slider.value()
 
-    def _on_value_changed(self, value: int) -> None:
-        self._label.setText(str(value))
+    def setValue(self, value: int) -> None:
+        self._slider.blockSignals(True)
+        self._spin.blockSignals(True)
+        self._slider.setValue(value)
+        self._spin.setValue(value)
+        self._slider.blockSignals(False)
+        self._spin.blockSignals(False)
+
+    def _on_slider(self, value: int) -> None:
+        self._spin.blockSignals(True)
+        self._spin.setValue(value)
+        self._spin.blockSignals(False)
+        self.valueChanged.emit(value)
+
+    def _on_spin(self, value: int) -> None:
+        self._slider.blockSignals(True)
+        self._slider.setValue(value)
+        self._slider.blockSignals(False)
         self.valueChanged.emit(value)

@@ -1,4 +1,4 @@
-"""ImageProcessor — orchestrates the full effect chain."""
+"""ImageProcessor — orchestrates the effect chain."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -9,56 +9,42 @@ from PIL import Image
 from myphotoworks.models.photo_item import PhotoItem
 from myphotoworks.models.settings import AppSettings
 from myphotoworks.processing import effects
-from myphotoworks.processing import resize as resize_mod
+from myphotoworks.processing.resize import resize_by_axis
 
 
-def process(photo_item: PhotoItem, settings: AppSettings) -> Image.Image:
-    """Apply the full effect chain to the photo and return the processed image.
+def process(
+    photo_item: PhotoItem,
+    settings: AppSettings,
+    apply_effects: bool = True,
+) -> Image.Image:
+    """Apply the effect chain and return the processed image.
 
-    Does NOT save to disk. Call save() separately.
+    apply_effects=False skips color corrections (Auto Level, Auto Contrast,
+    Brightness/Contrast) and applies only resize. Used when saving with key '1'
+    (Before pane — resize only).
+
     Effect chain order:
-      1. B&W conversion
-      2. Level clipping
-      3. Auto Level
-      4. Auto Contrast
-      5. Brightness / Contrast
-      6. Sharpen or Gaussian
-      7. Watermark
-      8. Resize
+      1. Auto Level          (if apply_effects)
+      2. Auto Contrast       (if apply_effects)
+      3. Brightness/Contrast (if apply_effects)
+      4. Resize              (always, if resize_enabled)
     """
     image = Image.open(photo_item.source_path).convert("RGB")
 
-    if settings.bw_enabled:
-        image = effects.apply_bw(image)
+    if apply_effects:
+        if settings.auto_level:
+            image = effects.auto_level(image)
 
-    if settings.level_min != 0 or settings.level_max != 255:
-        image = effects.apply_level(image, settings.level_min, settings.level_max)
+        if settings.auto_contrast:
+            image = effects.auto_contrast(image)
 
-    if settings.auto_level:
-        image = effects.auto_level(image)
+        if settings.brightness != 0 or settings.contrast != 0:
+            image = effects.apply_brightness_contrast(
+                image, settings.brightness, settings.contrast
+            )
 
-    if settings.auto_contrast:
-        image = effects.auto_contrast(image)
-
-    if settings.brightness != 0 or settings.contrast != 0:
-        image = effects.apply_brightness_contrast(image, settings.brightness, settings.contrast)
-
-    if settings.sharpen_enabled:
-        image = effects.apply_sharpen(image, settings.sharpen_amount)
-    elif settings.gaussian_enabled:
-        image = effects.apply_gaussian(image, settings.gaussian_radius)
-
-    if settings.watermark_enabled:
-        text = _build_watermark_text(photo_item, settings)
-        image = effects.apply_watermark(image, text, font_size=settings.watermark_font_size)
-
-    if settings.resize_enabled and (settings.resize_width > 0 or settings.resize_height > 0):
-        image = resize_mod.resize_image(
-            image,
-            settings.resize_width,
-            settings.resize_height,
-            settings.resize_keep_aspect,
-        )
+    if settings.resize_enabled and settings.resize_px > 0:
+        image = resize_by_axis(image, settings.resize_axis, settings.resize_px)
 
     return image
 
@@ -69,35 +55,17 @@ def save(
     settings: AppSettings,
     source_path: Path | None = None,
 ) -> None:
-    """Save the processed image to output_path.
+    """Save the processed image as JPEG, preserving EXIF from source."""
+    kwargs: dict = {
+        "quality": settings.output_quality,
+        "subsampling": 0,
+    }
 
-    Preserves EXIF from the source if available.
-    """
-    kwargs: dict = {}
+    if source_path is not None:
+        try:
+            exif_bytes = piexif.load(str(source_path))
+            kwargs["exif"] = piexif.dump(exif_bytes)
+        except Exception:
+            pass
 
-    if settings.output_format == "JPEG":
-        kwargs["quality"] = settings.output_quality
-        kwargs["subsampling"] = 0
-
-        # Preserve EXIF if source is available
-        if source_path is not None:
-            try:
-                exif_bytes = piexif.load(str(source_path))
-                # Update resolution fields
-                exif_bytes["0th"][piexif.ImageIFD.XResolution] = (settings.target_ppi, 1)
-                exif_bytes["0th"][piexif.ImageIFD.YResolution] = (settings.target_ppi, 1)
-                kwargs["exif"] = piexif.dump(exif_bytes)
-            except Exception:
-                pass
-
-    image.save(output_path, format=settings.output_format, **kwargs)
-
-
-def _build_watermark_text(photo_item: PhotoItem, settings: AppSettings) -> str:
-    if settings.watermark_use_timestamp:
-        date_str = photo_item.exif.get("date", "")
-        if date_str:
-            # Convert "2025:06:22 12:31:59" → "2025/06/22 12:31:59"
-            date_str = date_str.replace(":", "/", 2)
-            return date_str
-    return settings.watermark_text
+    image.save(output_path, format="JPEG", **kwargs)
