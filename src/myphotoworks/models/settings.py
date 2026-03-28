@@ -1,40 +1,35 @@
 from dataclasses import dataclass, field
+from enum import Enum
 from pathlib import Path
+
+
+class ResizeAxis(Enum):
+    LONG = "long"    # 긴 축 기준
+    SHORT = "short"  # 짧은 축 기준
+
+
+class OutputPathMode(Enum):
+    FIRST_FILE = "first_file"  # 첫 번째 파일 기준 output 폴더
+    PER_FILE = "per_file"      # 각 파일별 output 폴더
+    CUSTOM = "custom"          # 직접 지정 경로
 
 
 @dataclass
 class AppSettings:
-    # Filter
-    bw_enabled: bool = False
-    level_min: int = 0
-    level_max: int = 255
-
     # Effects
     auto_level: bool = False
     auto_contrast: bool = False
     brightness: int = 0   # -100 ~ +100
     contrast: int = 0     # -100 ~ +100
 
-    # Sharpen / Gaussian (mutually exclusive)
-    sharpen_enabled: bool = False
-    sharpen_amount: float = 1.0
-    gaussian_enabled: bool = False
-    gaussian_radius: float = 1.0
-
-    # Watermark
-    watermark_enabled: bool = False
-    watermark_text: str = ""
-    watermark_use_timestamp: bool = True
-    watermark_font_size: int = 24
-
     # Resize
     resize_enabled: bool = False
-    resize_width: int = 0
-    resize_height: int = 0
-    resize_keep_aspect: bool = True
+    resize_axis: ResizeAxis = ResizeAxis.LONG
+    resize_px: int = 1920
 
     # Output
-    output_dir: Path = field(default_factory=lambda: Path("."))
-    output_format: str = "JPEG"   # "JPEG" | "PNG"
-    output_quality: int = 90
-    target_ppi: int = 72
+    output_path_mode: OutputPathMode = OutputPathMode.FIRST_FILE
+    output_custom_dir: Path = field(default_factory=lambda: Path("."))
+    output_prefix: str = ""
+    output_suffix: str = ""
+    output_quality: int = 90   # 1~100

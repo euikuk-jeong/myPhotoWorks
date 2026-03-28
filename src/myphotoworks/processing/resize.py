@@ -3,34 +3,28 @@ from __future__ import annotations
 
 from PIL import Image
 
+from myphotoworks.models.settings import ResizeAxis
 
-def resize_image(
-    image: Image.Image,
-    width: int,
-    height: int,
-    keep_aspect: bool = True,
-) -> Image.Image:
-    """Resize image to target dimensions.
 
-    If keep_aspect is True, fits within (width, height) while maintaining ratio.
-    If width or height is 0, only the non-zero dimension is used as constraint.
+def resize_by_axis(image: Image.Image, axis: ResizeAxis, px: int) -> Image.Image:
+    """Resize image so that the specified axis equals px, maintaining aspect ratio.
+
+    axis=LONG  → the longer side becomes px
+    axis=SHORT → the shorter side becomes px
     """
     orig_w, orig_h = image.size
+    is_landscape = orig_w >= orig_h
 
-    if width <= 0 and height <= 0:
-        return image
-
-    if keep_aspect:
-        if width <= 0:
-            ratio = height / orig_h
-            target = (int(orig_w * ratio), height)
-        elif height <= 0:
-            ratio = width / orig_w
-            target = (width, int(orig_h * ratio))
+    if axis == ResizeAxis.LONG:
+        if is_landscape:
+            ratio = px / orig_w
         else:
-            ratio = min(width / orig_w, height / orig_h)
-            target = (int(orig_w * ratio), int(orig_h * ratio))
-    else:
-        target = (width if width > 0 else orig_w, height if height > 0 else orig_h)
+            ratio = px / orig_h
+    else:  # SHORT
+        if is_landscape:
+            ratio = px / orig_h
+        else:
+            ratio = px / orig_w
 
+    target = (max(1, int(orig_w * ratio)), max(1, int(orig_h * ratio)))
     return image.resize(target, Image.Resampling.LANCZOS)

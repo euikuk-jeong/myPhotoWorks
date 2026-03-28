@@ -1,4 +1,4 @@
-"""ThumbnailPanel — left-side photo list with async thumbnail generation."""
+"""ThumbnailPanel — scrollable photo list with async thumbnail generation."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -21,7 +21,7 @@ class _ThumbnailLoader(QRunnable):
         self._list_item = item
         self._photo = photo
 
-    def run(self) -> None:  # noqa: D102
+    def run(self) -> None:
         try:
             from PIL import Image
             with Image.open(self._photo.source_path) as img:
@@ -59,7 +59,7 @@ class ThumbnailPanel(QListWidget):
         self.setSpacing(4)
         self.setDragDropMode(QListWidget.DragDropMode.DropOnly)
         self.setAcceptDrops(True)
-        self.setFixedWidth(THUMBNAIL_SIZE + 40)
+        self.setSelectionMode(QListWidget.SelectionMode.ExtendedSelection)
 
         self._photos: list[PhotoItem] = []
         self._pool = QThreadPool.globalInstance()
@@ -82,6 +82,16 @@ class ThumbnailPanel(QListWidget):
             photo = PhotoItem(source_path=path)
             self._photos.append(photo)
             self._add_list_item(photo)
+
+    def remove_selected(self) -> None:
+        """Remove currently selected photos from the list."""
+        selected_rows = sorted(
+            {self.row(item) for item in self.selectedItems()}, reverse=True
+        )
+        for row in selected_rows:
+            if 0 <= row < len(self._photos):
+                self._photos.pop(row)
+                self.takeItem(row)
 
     def clear_all(self) -> None:
         self._photos.clear()
