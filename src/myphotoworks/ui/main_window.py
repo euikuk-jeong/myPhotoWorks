@@ -196,8 +196,7 @@ class MainWindow(QMainWindow):
         first_dir = photos[0].source_path.parent if photos else Path(".")
         win = PreviewWindow(photos, self._settings, first_file_dir=first_dir, parent=self)
         win._index = start_index
-        win._load_current()
-        win.show()
+        win.show()  # showEvent triggers _load_current() after widget sizes are valid
 
     # ------------------------------------------------------------------
     # Batch processing

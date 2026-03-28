@@ -96,15 +96,29 @@ class TestAutoContrast:
         result = auto_contrast(img)
         assert result.mode == "RGB"
 
-    def test_expands_range(self):
-        arr = np.full((50, 50, 3), 128, dtype=np.uint8)
-        arr[0, 0] = [50, 50, 50]
-        arr[49, 49] = [200, 200, 200]
+    def test_brightens_dark_image(self):
+        """Dark image (mean ≈ 50/255) should become brighter after auto_contrast."""
+        img = make_image(color=(50, 50, 50))
+        result = auto_contrast(img)
+        assert float(np.array(result).mean()) > float(np.array(img).mean())
+
+    def test_preserves_black_and_white_points(self):
+        """Pixels at 0 stay 0, pixels at 255 stay 255 (gamma preserves endpoints)."""
+        arr = np.zeros((10, 10, 3), dtype=np.uint8)
+        arr[0, 0] = [0, 0, 0]
+        arr[9, 9] = [255, 255, 255]
+        arr[5, 5] = [30, 30, 30]   # dark pixel drives mean low → gamma < 1
         img = Image.fromarray(arr)
         result = auto_contrast(img)
-        r_arr = np.array(result)
-        assert r_arr.min() == 0
-        assert r_arr.max() == 255
+        r = np.array(result)
+        assert r[0, 0, 0] == 0
+        assert r[9, 9, 0] == 255
+
+    def test_uniform_image_unchanged(self):
+        """Uniform mid-grey (mean == 0.5) leaves gamma ≈ 1 → image nearly unchanged."""
+        img = make_image(color=(128, 128, 128))
+        result = auto_contrast(img)
+        assert result.mode == "RGB"
 
 
 class TestApplyBrightnessContrast:

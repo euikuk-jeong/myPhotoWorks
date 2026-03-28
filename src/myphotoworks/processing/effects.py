@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import numpy as np
-from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont, ImageOps
+from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont
 
 
 def apply_bw(image: Image.Image) -> Image.Image:
@@ -22,19 +22,44 @@ def apply_level(image: Image.Image, level_min: int, level_max: int) -> Image.Ima
 
 
 def auto_level(image: Image.Image) -> Image.Image:
-    """Per-channel histogram stretch to full [0, 255] range."""
+    """Per-channel histogram stretch with 0.5% percentile clipping.
+
+    Using absolute min/max fails when even one pixel is fully black (0) and
+    one is fully white (255) — the stretch ratio becomes 1.0 (no change).
+    Percentile clipping ignores outliers like isolated bright stars or noise pixels.
+    """
     arr = np.array(image, dtype=np.float32)
     for ch in range(3):
-        ch_min = arr[:, :, ch].min()
-        ch_max = arr[:, :, ch].max()
-        if ch_max > ch_min:
-            arr[:, :, ch] = (arr[:, :, ch] - ch_min) / (ch_max - ch_min) * 255.0
+        lo = np.percentile(arr[:, :, ch], 0.5)
+        hi = np.percentile(arr[:, :, ch], 99.5)
+        if hi > lo:
+            arr[:, :, ch] = (arr[:, :, ch] - lo) / (hi - lo) * 255.0
     return Image.fromarray(np.clip(arr, 0, 255).astype(np.uint8))
 
 
 def auto_contrast(image: Image.Image) -> Image.Image:
-    """Luminance-based contrast stretch using Pillow's built-in."""
-    return ImageOps.autocontrast(image)
+    """Adaptive gamma correction that brings mean luminance toward mid-grey (0.5).
+
+    Unlike auto_level (linear per-channel stretch), this uses a non-linear
+    tone curve.  It works independently on images that have already been
+    processed by auto_level, making the two operations composable:
+      - auto_level  → removes per-channel colour cast (linear stretch)
+      - auto_contrast → boosts mid-tone brightness / contrast (gamma curve)
+
+    For dark images (mean < 0.5) the gamma < 1 brightens mid-tones.
+    For bright images (mean > 0.5) the gamma > 1 darkens them.
+    The black point (0) and white point (255) are preserved exactly.
+    """
+    import math
+    arr = np.array(image, dtype=np.float32) / 255.0
+    mean_lum = float(arr.mean())
+    if mean_lum <= 0.0 or mean_lum >= 1.0:
+        return image
+    # gamma that maps mean_lum → 0.5: 0.5 = mean_lum^gamma
+    gamma = math.log(0.5) / math.log(mean_lum)
+    gamma = max(0.2, min(4.0, gamma))   # clamp to a safe range
+    arr = np.power(np.clip(arr, 0.0, 1.0), gamma)
+    return Image.fromarray(np.clip(arr * 255.0, 0, 255).astype(np.uint8))
 
 
 def apply_brightness_contrast(
