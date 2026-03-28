@@ -459,7 +459,7 @@ class PreviewWindow(QMainWindow):
 
         status_bar = QStatusBar()
         self.setStatusBar(status_bar)
-        hint = QLabel("1:Before저장(리사이즈만)  2:After-A저장  3:After-B저장  Space/`:스킵  Del:원본삭제  ←/→:이전/다음  E:EXIF")
+        hint = QLabel("1:Before저장(리사이즈만)  2:After-A저장  3:After-B저장  Space/`:스킵  Del:원본삭제  ←/→:이전/다음  E:EXIF  Home:화면맞춤")
         hint.setStyleSheet("color: gray;")
         status_bar.addWidget(hint)
 
@@ -719,5 +719,8 @@ class PreviewWindow(QMainWindow):
                     index=self._index + 1, total=len(self._photos),
                 )
                 self._exif_panel.show()
+        elif key == Qt.Key.Key_Home:
+            self._user_has_zoomed = False
+            self._force_fit_all()
         else:
             super().keyPressEvent(event)
