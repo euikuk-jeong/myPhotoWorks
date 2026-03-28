@@ -46,3 +46,8 @@ src/myphotoworks/
 └── utils/                # exif_reader, config
 tests/                    # pytest unit tests
 ```
+
+## Git Rules
+
+- **Markdown files (`.md`) are not committed to git.** This includes context documents under `doc/context/` and any other session notes. The `.gitignore` already excludes `/doc/context/`.
+- When staging files, never include `.md` files unless explicitly instructed by the user.

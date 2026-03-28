@@ -13,9 +13,12 @@ from PyQt6.QtGui import (
     QWheelEvent,
 )
 from PyQt6.QtWidgets import (
+    QAbstractItemView,
     QCheckBox,
     QFormLayout,
+    QFrame,
     QHBoxLayout,
+    QHeaderView,
     QLabel,
     QMainWindow,
     QPushButton,
@@ -24,6 +27,8 @@ from PyQt6.QtWidgets import (
     QSpinBox,
     QSplitter,
     QStatusBar,
+    QTableWidget,
+    QTableWidgetItem,
     QVBoxLayout,
     QWidget,
 )
@@ -47,14 +52,7 @@ _ZOOM_MAX = 20.0
 class _ImageView(QWidget):
     """Custom widget rendering a QPixmap with zoom and synchronized pan.
 
-    Auto-fit behaviour
-    ------------------
-    _auto_fit is True after set_pixmap() (new photo loaded).
-    In this mode, resizeEvent() and set_pixmap() both recompute the fit
-    zoom so the image fills the widget exactly.
-    _auto_fit becomes False once the user manually zooms or pans,
-    or set_view() is called from an external sync.
-    New photo resets _auto_fit to True.
+    Fit management is handled externally by PreviewWindow._force_fit_all().
 
     Signals
     -------
@@ -67,11 +65,14 @@ class _ImageView(QWidget):
         super().__init__(parent)
         self.setMinimumSize(100, 80)
         self.setCursor(Qt.CursorShape.OpenHandCursor)
+        self.setAutoFillBackground(True)
+        palette = self.palette()
+        palette.setColor(palette.ColorRole.Window, Qt.GlobalColor.white)
+        self.setPalette(palette)
 
         self._pixmap: QPixmap | None = None
         self._zoom: float = 1.0
         self._offset = QPointF(0.0, 0.0)
-        self._auto_fit: bool = True
 
         self._drag_start: QPointF | None = None
         self._drag_offset_start = QPointF(0.0, 0.0)
@@ -82,29 +83,13 @@ class _ImageView(QWidget):
 
     def set_pixmap(self, pixmap: QPixmap) -> None:
         self._pixmap = pixmap
-        self._auto_fit = True          # new photo → re-enable auto-fit
-        self._try_fit()
         self.update()
 
     def set_view(self, zoom: float, offset: QPointF) -> None:
-        """Apply zoom/offset from external sync (another pane)."""
-        self._auto_fit = False         # sync from user action, stop auto-fit
+        """Apply zoom/offset from external source."""
         self._zoom = zoom
         self._offset = offset
         self.update()
-
-    # ------------------------------------------------------------------
-    # Auto-fit helper
-    # ------------------------------------------------------------------
-
-    def _try_fit(self) -> None:
-        """Compute fit zoom if in auto-fit mode and widget has a valid size."""
-        if self._auto_fit and self._pixmap and self.width() > 0 and self.height() > 0:
-            self._zoom = min(
-                self.width() / self._pixmap.width(),
-                self.height() / self._pixmap.height(),
-            )
-            self._offset = QPointF(0.0, 0.0)
 
     # ------------------------------------------------------------------
     # Paint
@@ -129,20 +114,10 @@ class _ImageView(QWidget):
         )
 
     # ------------------------------------------------------------------
-    # Resize → re-fit if in auto-fit mode
-    # ------------------------------------------------------------------
-
-    def resizeEvent(self, event) -> None:  # noqa: N802
-        super().resizeEvent(event)
-        self._try_fit()
-        self.update()
-
-    # ------------------------------------------------------------------
     # Zoom (wheel)
     # ------------------------------------------------------------------
 
     def wheelEvent(self, event: QWheelEvent) -> None:  # noqa: N802
-        self._auto_fit = False
         delta = event.angleDelta().y()
         factor = _ZOOM_FACTOR if delta > 0 else 1.0 / _ZOOM_FACTOR
         new_zoom = max(_ZOOM_MIN, min(_ZOOM_MAX, self._zoom * factor))
@@ -164,7 +139,6 @@ class _ImageView(QWidget):
 
     def mousePressEvent(self, event) -> None:  # noqa: N802
         if event.button() == Qt.MouseButton.LeftButton:
-            self._auto_fit = False
             self._drag_start = event.position()
             self._drag_offset_start = QPointF(self._offset)
             self.setCursor(Qt.CursorShape.ClosedHandCursor)
@@ -189,48 +163,58 @@ class _ImageView(QWidget):
 # _ExifBar — scrollable EXIF info (Before pane bottom)
 # ---------------------------------------------------------------------------
 
-class _ExifBar(QScrollArea):
+class _ExifBar(QWidget):
+    """Compact two-column EXIF table shown below the Before pane."""
+
+    _ROWS = [
+        ("파일명",   "filename"),
+        ("크기",    "size"),
+        ("촬영일",   "date"),
+        ("카메라",   "model"),
+        ("셔터",    "shutter"),
+        ("조리개",   "aperture"),
+        ("초점거리",  "focal_length"),
+        ("ISO",    "iso"),
+        ("노출보정",  "exposure_bias"),
+    ]
+
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self.setFixedHeight(_BOTTOM_BAR_HEIGHT)
-        self.setFrameShape(QScrollArea.Shape.NoFrame)
-        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        self.setWidgetResizable(True)
 
-        container = QWidget()
-        self.setWidget(container)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
 
-        form = QFormLayout(container)
-        form.setContentsMargins(6, 4, 6, 4)
-        form.setSpacing(3)
-        form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
+        self._table = QTableWidget(len(self._ROWS), 2)
+        self._table.horizontalHeader().setVisible(False)
+        self._table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        self._table.horizontalHeader().setStretchLastSection(True)
+        self._table.verticalHeader().setVisible(False)
+        self._table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self._table.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
+        self._table.setAlternatingRowColors(True)
+        self._table.setFrameShape(QFrame.Shape.NoFrame)
+        self._table.setWordWrap(False)
 
-        def _lbl() -> QLabel:
-            lbl = QLabel("—")
-            lbl.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-            return lbl
+        # Pre-populate row labels
+        for r, (label, _) in enumerate(self._ROWS):
+            key_item = QTableWidgetItem(label)
+            key_item.setFlags(Qt.ItemFlag.ItemIsEnabled)
+            self._table.setItem(r, 0, key_item)
+            val_item = QTableWidgetItem("—")
+            val_item.setFlags(Qt.ItemFlag.ItemIsEnabled)
+            self._table.setItem(r, 1, val_item)
 
-        self._lbl_filename = _lbl()
-        self._lbl_size = _lbl()
-        self._lbl_date = _lbl()
-        self._lbl_iso = _lbl()
-        self._lbl_comment = _lbl()
-
-        form.addRow("파일명", self._lbl_filename)
-        form.addRow("크기", self._lbl_size)
-        form.addRow("촬영일", self._lbl_date)
-        form.addRow("ISO", self._lbl_iso)
-        form.addRow("코멘트", self._lbl_comment)
+        self._table.resizeRowsToContents()
+        layout.addWidget(self._table)
 
     def update_photo(self, path: Path) -> None:
         exif = read_exif(path)
-        self._lbl_filename.setText(exif.get("filename") or "—")
-        self._lbl_size.setText(exif.get("size") or "—")
-        date_raw = exif.get("date", "")
-        self._lbl_date.setText(date_raw.replace(":", "/", 2) if date_raw else "—")
-        self._lbl_iso.setText(exif.get("iso") or "—")
-        self._lbl_comment.setText(exif.get("comment") or "—")
+        for r, (_, key) in enumerate(self._ROWS):
+            raw = exif.get(key, "")
+            if key == "date" and raw:
+                raw = raw.replace(":", "/", 2)
+            self._table.item(r, 1).setText(raw or "—")
 
 
 # ---------------------------------------------------------------------------
@@ -385,7 +369,7 @@ class PreviewWindow(QMainWindow):
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle("미리보기")
-        self.resize(1200, 700)
+        self.resize(1200, 750)
 
         self._photos = photos
         self._base_settings = settings
@@ -394,9 +378,10 @@ class PreviewWindow(QMainWindow):
         )
         self._index = 0
         self._exif_panel: ExifPanel | None = None
+        self._user_has_zoomed = False
+        self._first_show = True
 
         self._build_ui()
-        self._load_current()
 
     # ------------------------------------------------------------------
     # UI construction
@@ -409,29 +394,29 @@ class PreviewWindow(QMainWindow):
         root.setContentsMargins(4, 4, 4, 4)
         root.setSpacing(4)
 
-        splitter = QSplitter(Qt.Orientation.Horizontal)
+        self._splitter = QSplitter(Qt.Orientation.Horizontal)
 
         self._exif_bar = _ExifBar()
         self._before_pane = _Pane("Before (원본)", self._exif_bar)
         self._before_pane.image_view.view_changed.connect(self._on_view_changed)
-        splitter.addWidget(self._before_pane)
+        self._splitter.addWidget(self._before_pane)
 
         self._effects_bar_a = _EffectsBar(copy.copy(self._base_settings))
         self._effects_bar_a.settings_changed.connect(self._on_after_a_changed)
         self._after_a_pane = _Pane("After-A", self._effects_bar_a)
         self._after_a_pane.image_view.view_changed.connect(self._on_view_changed)
-        splitter.addWidget(self._after_a_pane)
+        self._splitter.addWidget(self._after_a_pane)
 
         self._effects_bar_b = _EffectsBar(copy.copy(self._base_settings))
         self._effects_bar_b.settings_changed.connect(self._on_after_b_changed)
         self._after_b_pane = _Pane("After-B", self._effects_bar_b)
         self._after_b_pane.image_view.view_changed.connect(self._on_view_changed)
-        splitter.addWidget(self._after_b_pane)
+        self._splitter.addWidget(self._after_b_pane)
 
         for i in range(3):
-            splitter.setStretchFactor(i, 1)
+            self._splitter.setStretchFactor(i, 1)
 
-        root.addWidget(splitter)
+        root.addWidget(self._splitter, 1)  # stretch=1 so splitter fills all available height
 
         self._counter_lbl = QLabel()
         self._counter_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -479,25 +464,83 @@ class PreviewWindow(QMainWindow):
         status_bar.addWidget(hint)
 
     # ------------------------------------------------------------------
+    # Show / resize events
+    # ------------------------------------------------------------------
+
+    def showEvent(self, event) -> None:  # noqa: N802
+        super().showEvent(event)
+        if self._first_show:
+            self._first_show = False
+            self._load_current()
+
+    def resizeEvent(self, event) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        # Use a deferred call so child widgets have been resized before we read their sizes
+        if not self._user_has_zoomed:
+            from PyQt6.QtCore import QTimer
+            QTimer.singleShot(0, self._force_fit_all)
+
+    def _force_fit_all(self) -> None:
+        """Equalize pane widths then apply a common fit-zoom to all 3 panes."""
+        # Force equal widths so one pane doesn't get less space due to size hints
+        total = self._splitter.width()
+        if total <= 0:
+            return
+        third = total // 3
+        self._splitter.setSizes([third, third, third])
+
+        # Activate each pane's layout immediately so child widget sizes reflect the new split
+        for pane in (self._before_pane, self._after_a_pane, self._after_b_pane):
+            if pane.layout():
+                pane.layout().activate()
+
+        # Compute minimum fit-zoom across all 3 panes so image fits everywhere
+        panes = (self._before_pane, self._after_a_pane, self._after_b_pane)
+        zoom: float | None = None
+        for pane in panes:
+            view = pane.image_view
+            if view._pixmap and view.width() > 0 and view.height() > 0:
+                z = min(
+                    view.width() / view._pixmap.width(),
+                    view.height() / view._pixmap.height(),
+                )
+                if zoom is None or z < zoom:
+                    zoom = z
+        if zoom is None:
+            return
+        offset = QPointF(0.0, 0.0)
+        for pane in panes:
+            pane.image_view._zoom = zoom
+            pane.image_view._offset = offset
+            pane.image_view.update()
+
+    # ------------------------------------------------------------------
     # Photo loading & rendering
     # ------------------------------------------------------------------
 
     def _load_current(self) -> None:
         if not self._photos:
             return
+        from PyQt6.QtCore import QTimer
         photo = self._photos[self._index]
         total = len(self._photos)
         self._counter_lbl.setText(f"{self._index + 1} / {total}  —  {photo.source_path.name}")
         self._prev_btn.setEnabled(self._index > 0)
         self._next_btn.setEnabled(self._index < total - 1)
 
+        self._user_has_zoomed = False
         self._exif_bar.update_photo(photo.source_path)
         self._render_before(photo)
         self._render_after(self._after_a_pane, self._effects_bar_a, photo)
         self._render_after(self._after_b_pane, self._effects_bar_b, photo)
 
+        # Defer fit so the event loop has processed the new pixmaps
+        QTimer.singleShot(0, self._force_fit_all)
+
         if self._exif_panel and self._exif_panel.isVisible():
-            self._exif_panel.update_photo(photo.source_path)
+            self._exif_panel.update_photo(
+                photo.source_path, index=self._index + 1, total=len(self._photos)
+            )
 
     def _render_before(self, photo: PhotoItem) -> None:
         try:
@@ -530,6 +573,7 @@ class PreviewWindow(QMainWindow):
     # ------------------------------------------------------------------
 
     def _on_view_changed(self, zoom: float, offset: QPointF) -> None:
+        self._user_has_zoomed = True
         sender_view = self.sender()
         for pane in (self._before_pane, self._after_a_pane, self._after_b_pane):
             if pane.image_view is not sender_view:
@@ -567,7 +611,10 @@ class PreviewWindow(QMainWindow):
         if checked:
             if self._exif_panel is None:
                 self._exif_panel = ExifPanel(self)
-            self._exif_panel.update_photo(self._photos[self._index].source_path)
+            self._exif_panel.update_photo(
+                self._photos[self._index].source_path,
+                index=self._index + 1, total=len(self._photos),
+            )
             self._exif_panel.show()
         else:
             if self._exif_panel:
@@ -667,7 +714,10 @@ class PreviewWindow(QMainWindow):
             else:
                 if self._exif_panel is None:
                     self._exif_panel = ExifPanel(self)
-                self._exif_panel.update_photo(self._photos[self._index].source_path)
+                self._exif_panel.update_photo(
+                    self._photos[self._index].source_path,
+                    index=self._index + 1, total=len(self._photos),
+                )
                 self._exif_panel.show()
         else:
             super().keyPressEvent(event)
