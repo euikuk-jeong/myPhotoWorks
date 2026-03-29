@@ -2,8 +2,11 @@
 from __future__ import annotations
 
 import copy
+import logging
+import time
 from pathlib import Path
 
+from PIL import Image
 from PyQt6.QtCore import QEvent, QPointF, Qt, pyqtSignal
 from PyQt6.QtGui import (
     QImage,
@@ -24,7 +27,6 @@ from PyQt6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QPushButton,
-    QScrollArea,
     QSlider,
     QSpinBox,
     QSplitter,
@@ -40,6 +42,8 @@ from myphotoworks.models.settings import AppSettings
 from myphotoworks.processing import processor
 from myphotoworks.ui.exif_panel import ExifPanel
 from myphotoworks.utils.exif_reader import read_exif
+
+logger = logging.getLogger(__name__)
 
 _BOTTOM_BAR_HEIGHT = 110
 _ZOOM_FACTOR = 1.15
@@ -383,6 +387,8 @@ class PreviewWindow(QMainWindow):
         self._exif_panel: ExifPanel | None = None
         self._user_has_zoomed = False
         self._first_show = True
+        self._cached_image: Image.Image | None = None
+        self._cached_preview: Image.Image | None = None  # downsampled for effects
 
         self._build_ui()
         QApplication.instance().installEventFilter(self)
@@ -526,6 +532,7 @@ class PreviewWindow(QMainWindow):
         if not self._photos:
             return
         from PyQt6.QtCore import QTimer
+        t_total = time.perf_counter()
         photo = self._photos[self._index]
         total = len(self._photos)
         self._counter_lbl.setText(f"{self._index + 1} / {total}  —  {photo.source_path.name}")
@@ -533,10 +540,40 @@ class PreviewWindow(QMainWindow):
         self._next_btn.setEnabled(self._index < total - 1)
 
         self._user_has_zoomed = False
+
+        # Load original image once and cache for all 3 panes
+        t0 = time.perf_counter()
+        self._cached_image = Image.open(photo.source_path).convert("RGB")
+        logger.debug("[_load_current] Image.open %.1f ms  (%s)",
+                     (time.perf_counter() - t0) * 1000, photo.source_path.name)
+
+        # Downsample for preview effects — cap long side at 1600px
+        t0 = time.perf_counter()
+        self._cached_preview = self._make_preview_image(self._cached_image)
+        logger.debug("[_load_current] downsample %.1f ms  (%dx%d → %dx%d)",
+                     (time.perf_counter() - t0) * 1000,
+                     self._cached_image.width, self._cached_image.height,
+                     self._cached_preview.width, self._cached_preview.height)
+
+        t0 = time.perf_counter()
         self._exif_bar.update_photo(photo.source_path)
+        logger.debug("[_load_current] EXIF read %.1f ms",
+                     (time.perf_counter() - t0) * 1000)
+
+        t0 = time.perf_counter()
         self._render_before(photo)
+        logger.debug("[_load_current] render_before %.1f ms",
+                     (time.perf_counter() - t0) * 1000)
+
+        t0 = time.perf_counter()
         self._render_after(self._after_a_pane, self._effects_bar_a, photo)
+        logger.debug("[_load_current] render_after_A %.1f ms",
+                     (time.perf_counter() - t0) * 1000)
+
+        t0 = time.perf_counter()
         self._render_after(self._after_b_pane, self._effects_bar_b, photo)
+        logger.debug("[_load_current] render_after_B %.1f ms",
+                     (time.perf_counter() - t0) * 1000)
 
         # Defer fit so the event loop has processed the new pixmaps
         QTimer.singleShot(0, self._force_fit_all)
@@ -546,11 +583,30 @@ class PreviewWindow(QMainWindow):
                 photo.source_path, index=self._index + 1, total=len(self._photos)
             )
 
+        logger.info("[_load_current] TOTAL %.1f ms  (%s)",
+                    (time.perf_counter() - t_total) * 1000, photo.source_path.name)
+
+    _PREVIEW_MAX_PX = 1600  # long-side cap for preview effects
+
+    @classmethod
+    def _make_preview_image(cls, img: Image.Image) -> Image.Image:
+        """Downsample to _PREVIEW_MAX_PX on the long side for fast effects."""
+        w, h = img.size
+        long_side = max(w, h)
+        if long_side <= cls._PREVIEW_MAX_PX:
+            return img
+        ratio = cls._PREVIEW_MAX_PX / long_side
+        new_size = (max(1, int(w * ratio)), max(1, int(h * ratio)))
+        return img.resize(new_size, Image.Resampling.LANCZOS)
+
     def _render_before(self, photo: PhotoItem) -> None:
         try:
-            from PIL import Image
-            with Image.open(photo.source_path) as img:
-                self._before_pane.set_pixmap(self._pil_to_pixmap(img.convert("RGB")))
+            src = self._cached_preview if self._cached_preview is not None else self._cached_image
+            if src is not None:
+                self._before_pane.set_pixmap(self._pil_to_pixmap(src))
+            else:
+                with Image.open(photo.source_path) as img:
+                    self._before_pane.set_pixmap(self._pil_to_pixmap(img.convert("RGB")))
         except Exception:
             pass
 
@@ -560,7 +616,10 @@ class PreviewWindow(QMainWindow):
             settings = effects_bar.settings()
             preview_settings = copy.copy(settings)
             preview_settings.resize_enabled = False   # resize는 저장 시에만 적용
-            img = processor.process(photo, preview_settings, apply_effects=True)
+            img = processor.process(
+                photo, preview_settings, apply_effects=True,
+                source_image=self._cached_preview or self._cached_image,
+            )
             pane.set_pixmap(self._pil_to_pixmap(img))
         except Exception:
             pass
@@ -602,10 +661,16 @@ class PreviewWindow(QMainWindow):
     # ------------------------------------------------------------------
 
     def _on_after_a_changed(self) -> None:
+        t0 = time.perf_counter()
         self._render_after(self._after_a_pane, self._effects_bar_a, self._photos[self._index])
+        logger.debug("[effect_change] After-A re-render %.1f ms",
+                     (time.perf_counter() - t0) * 1000)
 
     def _on_after_b_changed(self) -> None:
+        t0 = time.perf_counter()
         self._render_after(self._after_b_pane, self._effects_bar_b, self._photos[self._index])
+        logger.debug("[effect_change] After-B re-render %.1f ms",
+                     (time.perf_counter() - t0) * 1000)
 
     # ------------------------------------------------------------------
     # EXIF floating panel
@@ -662,16 +727,26 @@ class PreviewWindow(QMainWindow):
 
     def _save_and_advance(self, settings: AppSettings, apply_effects: bool) -> None:
         photo = self._photos[self._index]
+        t_total = time.perf_counter()
         try:
+            t0 = time.perf_counter()
             img = processor.process(photo, settings, apply_effects=apply_effects)
+            logger.debug("[save] process %.1f ms", (time.perf_counter() - t0) * 1000)
+
             out_path = self._resolve_output_path(photo, settings)
             out_path.parent.mkdir(parents=True, exist_ok=True)
+
+            t0 = time.perf_counter()
             processor.save(img, out_path, settings, photo.source_path)
+            logger.debug("[save] write %.1f ms", (time.perf_counter() - t0) * 1000)
+
             self.photo_saved.emit(photo)
             self._saved_count += 1
         except Exception as e:
             self.statusBar().showMessage(f"저장 실패: {e}", 3000)
             return
+        logger.info("[save] TOTAL %.1f ms  (%s)",
+                    (time.perf_counter() - t_total) * 1000, photo.source_path.name)
         self._advance()
 
     def _advance(self) -> None:

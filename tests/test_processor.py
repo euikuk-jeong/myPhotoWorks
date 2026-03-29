@@ -121,6 +121,50 @@ class TestPreviewNoResize:
         assert img.height == 250
 
 
+class TestProcessSourceImage:
+    """source_image 파라미터로 캐시된 이미지를 전달하는 동작 검증."""
+
+    def test_source_image_skips_disk_io(self, tmp_path):
+        """source_image 전달 시 디스크 I/O 없이 처리."""
+        path = make_jpeg_file(tmp_path, 200, 100)
+        photo = make_photo_item(path)
+        cached = Image.open(path).convert("RGB")
+
+        result = processor.process(photo, AppSettings(), source_image=cached)
+        assert isinstance(result, Image.Image)
+        assert result.size == (200, 100)
+
+    def test_source_image_not_mutated(self, tmp_path):
+        """source_image 원본은 process 호출 후 변경되지 않아야 함."""
+        path = make_jpeg_file(tmp_path, 200, 100)
+        photo = make_photo_item(path)
+        cached = Image.open(path).convert("RGB")
+
+        import numpy as np
+        original_data = np.array(cached).copy()
+
+        processor.process(
+            photo, AppSettings(auto_level=True, brightness=50),
+            apply_effects=True, source_image=cached,
+        )
+        assert np.array_equal(np.array(cached), original_data)
+
+    def test_source_image_with_effects(self, tmp_path):
+        """source_image와 디스크 로드가 같은 결과를 내야 함."""
+        path = make_jpeg_file(tmp_path, 100, 100)
+        photo = make_photo_item(path)
+        cached = Image.open(path).convert("RGB")
+
+        settings = AppSettings(brightness=30, contrast=20)
+        result_disk = processor.process(photo, settings, apply_effects=True)
+        result_cached = processor.process(
+            photo, settings, apply_effects=True, source_image=cached,
+        )
+
+        import numpy as np
+        assert np.array_equal(np.array(result_disk), np.array(result_cached))
+
+
 class TestSave:
     def test_saves_jpeg(self, tmp_path):
         path = make_jpeg_file(tmp_path)
