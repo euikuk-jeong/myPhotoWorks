@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 from PIL import Image
 
-from myphotoworks.models.photo_item import PhotoItem
+from myphotoworks.models.photo_item import PhotoItem, ProcessStatus
 from myphotoworks.models.settings import AppSettings, OutputPathMode
 from myphotoworks.workers.batch_worker import BatchWorker
 
@@ -103,6 +103,29 @@ class TestBatchWorkerRun:
         for p in paths:
             out = tmp_path / "output" / p.name
             assert out.exists(), f"{out} 가 존재해야 함"
+
+    def test_done_status_count(self, tmp_path):
+        """성공 처리된 파일은 ProcessStatus.DONE 이어야 하고, 완료 카운트가 일치해야 함."""
+        paths = [make_jpeg_file(tmp_path, f"img{i}.jpg") for i in range(3)]
+        photos = [PhotoItem(source_path=p) for p in paths]
+        settings = AppSettings(output_path_mode=OutputPathMode.PER_FILE)
+
+        worker = BatchWorker(photos, settings)
+        worker.run()
+
+        done_count = sum(1 for p in photos if p.status == ProcessStatus.DONE)
+        assert done_count == 3
+
+    def test_error_status_on_bad_file(self, tmp_path):
+        """존재하지 않는 파일은 ProcessStatus.ERROR 여야 함."""
+        bad = PhotoItem(source_path=tmp_path / "nonexistent.jpg")
+        settings = AppSettings(output_path_mode=OutputPathMode.PER_FILE)
+
+        worker = BatchWorker([bad], settings)
+        worker.run()
+
+        assert bad.status == ProcessStatus.ERROR
+        assert bad.error_message != ""
 
     def test_progress_signal_count(self, tmp_path):
         """progress 시그널이 파일 수만큼 발생해야 함 (동기 run() 호출)."""

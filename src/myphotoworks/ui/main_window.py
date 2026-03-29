@@ -9,6 +9,7 @@ from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QMainWindow,
+    QMessageBox,
     QProgressBar,
     QPushButton,
     QSplitter,
@@ -228,8 +229,16 @@ class MainWindow(QMainWindow):
     def _on_process_finished(self) -> None:
         self._progress_bar.setVisible(False)
         self._set_processing(False)
-        total = len(self._thumb_panel.photos())
-        self._status_label.setText(f"완료: {total}장 처리됨")
+        photos = self._thumb_panel.photos()
+        total = len(photos)
+        from myphotoworks.models.photo_item import ProcessStatus
+        saved = sum(1 for p in photos if p.status == ProcessStatus.DONE)
+        self._status_label.setText(f"완료: {total}장 중 {saved}장 저장됨")
+        QMessageBox.information(
+            self,
+            "일괄 적용 완료",
+            f"처리가 완료되었습니다.\n\n전체 {total}개 중 {saved}개가 저장되었습니다.",
+        )
 
     def _on_process_error(self, msg: str) -> None:
         self._status_label.setText(f"오류: {msg}")
