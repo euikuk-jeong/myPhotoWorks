@@ -1,13 +1,19 @@
 import sys
+from pathlib import Path
 
+from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import QApplication
 
 from myphotoworks.ui.main_window import MainWindow
+
+_ICON_PATH = Path(__file__).parent / "resources" / "myphotoworks.ico"
 
 
 def main() -> None:
     app = QApplication(sys.argv)
     app.setStyle("windowsvista")
+    if _ICON_PATH.exists():
+        app.setWindowIcon(QIcon(str(_ICON_PATH)))
     window = MainWindow()
     window.show()
     sys.exit(app.exec())
