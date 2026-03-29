@@ -1,5 +1,5 @@
 """Unit tests for PreviewWindow — keyboard shortcuts, saved_count, completion dialog,
-and event filter routing.
+event filter routing, and prefetch cache.
 
 GUI 테스트는 pytest-qt의 qapp fixture를 통해 QApplication 인스턴스를 공급받는다.
 PreviewWindow는 show() 없이 생성하므로 _load_current()는 호출되지 않는다.
@@ -7,6 +7,7 @@ PreviewWindow는 show() 없이 생성하므로 _load_current()는 호출되지 �
 """
 from __future__ import annotations
 
+import time
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -332,3 +333,96 @@ class TestMakePreviewImage:
         result = PreviewWindow._make_preview_image(img)
         assert max(result.size) <= PreviewWindow._PREVIEW_MAX_PX
         assert result.height == PreviewWindow._PREVIEW_MAX_PX
+
+
+# ---------------------------------------------------------------------------
+# Tests — _PrefetchCache
+# ---------------------------------------------------------------------------
+
+class TestPrefetchCache:
+    def test_cache_miss_returns_none(self):
+        from myphotoworks.ui.preview_window import _PrefetchCache
+        cache = _PrefetchCache(preview_max_px=1600)
+        assert cache.get(Path("nonexistent.jpg")) is None
+
+    def test_prefetch_loads_image(self, tmp_path):
+        from myphotoworks.ui.preview_window import _PrefetchCache
+        path = tmp_path / "test.jpg"
+        Image.new("RGB", (200, 100), (255, 0, 0)).save(path, format="JPEG")
+
+        cache = _PrefetchCache(preview_max_px=1600)
+        cache.prefetch([path])
+
+        # Wait for background thread to finish
+        for _ in range(50):
+            if cache.get(path) is not None:
+                break
+            time.sleep(0.05)
+
+        result = cache.get(path)
+        assert result is not None
+        original, preview = result
+        assert original.size == (200, 100)
+        assert preview is original  # small image, no downsample needed
+
+    def test_prefetch_downsamples_large_image(self, tmp_path):
+        from myphotoworks.ui.preview_window import _PrefetchCache
+        path = tmp_path / "big.jpg"
+        Image.new("RGB", (4000, 3000)).save(path, format="JPEG")
+
+        cache = _PrefetchCache(preview_max_px=1600)
+        cache.prefetch([path])
+
+        for _ in range(50):
+            if cache.get(path) is not None:
+                break
+            time.sleep(0.05)
+
+        result = cache.get(path)
+        assert result is not None
+        original, preview = result
+        assert original.size == (4000, 3000)
+        assert max(preview.size) <= 1600
+
+    def test_eviction_removes_stale_entries(self, tmp_path):
+        from myphotoworks.ui.preview_window import _PrefetchCache
+        path_a = tmp_path / "a.jpg"
+        path_b = tmp_path / "b.jpg"
+        Image.new("RGB", (100, 100)).save(path_a, format="JPEG")
+        Image.new("RGB", (100, 100)).save(path_b, format="JPEG")
+
+        cache = _PrefetchCache(preview_max_px=1600)
+        cache.prefetch([path_a])
+
+        for _ in range(50):
+            if cache.get(path_a) is not None:
+                break
+            time.sleep(0.05)
+        assert cache.get(path_a) is not None
+
+        # Prefetching only path_b should evict path_a
+        cache.prefetch([path_b])
+
+        for _ in range(50):
+            if cache.get(path_b) is not None:
+                break
+            time.sleep(0.05)
+
+        assert cache.get(path_a) is None
+        assert cache.get(path_b) is not None
+
+    def test_clear_empties_cache(self, tmp_path):
+        from myphotoworks.ui.preview_window import _PrefetchCache
+        path = tmp_path / "test.jpg"
+        Image.new("RGB", (100, 100)).save(path, format="JPEG")
+
+        cache = _PrefetchCache(preview_max_px=1600)
+        cache.prefetch([path])
+
+        for _ in range(50):
+            if cache.get(path) is not None:
+                break
+            time.sleep(0.05)
+
+        cache.clear()
+        assert cache.get(path) is None
