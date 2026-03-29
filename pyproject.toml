@@ -1,0 +1,38 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "myphotoworks"
+version = "0.1.0"
+description = "A photo batch processing application with resize, Auto Level, and Auto Contrast"
+requires-python = ">=3.11"
+dependencies = [
+    "PyQt6>=6.6.0",
+    "Pillow>=10.0.0",
+    "numpy>=1.26.0",
+    "piexif>=1.1.3",
+]
+
+[project.scripts]
+myphotoworks = "myphotoworks.main:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/myphotoworks"]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-qt>=4.4.0",
+    "ruff>=0.3.0",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
