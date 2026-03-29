@@ -302,3 +302,33 @@ class TestEventFilter:
         assert result is False
         mock_kpe.assert_not_called()
         external.deleteLater()
+
+
+# ---------------------------------------------------------------------------
+# Tests — preview downsampling
+# ---------------------------------------------------------------------------
+
+class TestMakePreviewImage:
+    def test_large_image_downsampled(self, qapp):
+        """큰 이미지는 long side가 _PREVIEW_MAX_PX 이하로 축소."""
+        from myphotoworks.ui.preview_window import PreviewWindow
+        img = Image.new("RGB", (7728, 5152))
+        result = PreviewWindow._make_preview_image(img)
+        assert max(result.size) <= PreviewWindow._PREVIEW_MAX_PX
+        # aspect ratio preserved
+        assert abs(result.width / result.height - 7728 / 5152) < 0.01
+
+    def test_small_image_unchanged(self, qapp):
+        """_PREVIEW_MAX_PX 이하 이미지는 그대로 반환."""
+        from myphotoworks.ui.preview_window import PreviewWindow
+        img = Image.new("RGB", (800, 600))
+        result = PreviewWindow._make_preview_image(img)
+        assert result is img  # same object, no copy
+
+    def test_portrait_image_downsampled(self, qapp):
+        """세로 이미지도 long side 기준으로 축소."""
+        from myphotoworks.ui.preview_window import PreviewWindow
+        img = Image.new("RGB", (3000, 5000))
+        result = PreviewWindow._make_preview_image(img)
+        assert max(result.size) <= PreviewWindow._PREVIEW_MAX_PX
+        assert result.height == PreviewWindow._PREVIEW_MAX_PX
