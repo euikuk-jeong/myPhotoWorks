@@ -23,14 +23,18 @@
 - 출력 포맷 선택 (JPEG / PNG), 품질 설정
 - 배치 처리 진행 상황 표시
 
-## 기술 스택
+## 기술 스택 및 의존성
 
-| 역할 | 라이브러리 |
-|---|---|
-| GUI | PyQt6 |
-| 이미지 처리 | Pillow, NumPy |
-| EXIF | piexif |
-| 패키지 관리 | uv |
+| 역할 | 라이브러리 | 버전 | 라이선스 |
+|---|---|---|---|
+| GUI | PyQt6 | ≥ 6.6.0 | GPL v3 |
+| 이미지 처리 | Pillow | ≥ 10.0.0 | HPND (MIT-like) |
+| 이미지 처리 | NumPy | ≥ 1.26.0 | BSD 3-Clause |
+| EXIF | piexif | ≥ 1.1.3 | MIT |
+| 패키지 관리 | uv | — | MIT |
+| EXE 빌드 | PyInstaller | (dev) | GPL v2 (with bootloader exception) |
+
+> **라이선스 참고**: PyQt6이 GPL v3를 사용하므로 본 애플리케이션을 배포할 경우 GPL v3 조건을 따라야 합니다. 소스 비공개 상업 배포가 필요한 경우 PyQt6 상업 라이선스 구매 또는 PySide6(LGPL v3)로의 전환이 필요합니다. 현재 이 프로젝트는 **개인 사용 목적**으로 개발되고 있습니다.
 
 ## 요구 사항
 
@@ -90,4 +94,4 @@ Contributions are welcome! Please follow these steps:
 
 ## License
 
-This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
+본 프로젝트의 자체 코드는 MIT License로 작성되었으나, 런타임 의존성인 PyQt6이 GPL v3를 적용하고 있어 배포 시에는 GPL v3 조건이 적용됩니다. 자세한 내용은 [LICENSE](LICENSE) 파일을 참조하세요.
