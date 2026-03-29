@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import copy
 import logging
+import threading
 import time
 from pathlib import Path
 
@@ -351,6 +352,69 @@ class _Pane(QWidget):
 # PreviewWindow
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# _PrefetchCache — background image loader for adjacent photos
+# ---------------------------------------------------------------------------
+
+class _PrefetchCache:
+    """Cache that pre-loads adjacent images in a background thread.
+
+    Stores tuples of (original_image, preview_image) keyed by file path.
+    Capacity is kept small (3 entries: prev, current, next) to limit memory.
+    """
+
+    _MAX_ENTRIES = 3
+
+    def __init__(self, preview_max_px: int) -> None:
+        self._preview_max_px = preview_max_px
+        self._cache: dict[Path, tuple[Image.Image, Image.Image]] = {}
+        self._lock = threading.Lock()
+        self._pending: set[Path] = set()
+
+    def get(self, path: Path) -> tuple[Image.Image, Image.Image] | None:
+        with self._lock:
+            return self._cache.get(path)
+
+    def _load_and_store(self, path: Path) -> None:
+        try:
+            t0 = time.perf_counter()
+            img = Image.open(path).convert("RGB")
+            w, h = img.size
+            long_side = max(w, h)
+            if long_side <= self._preview_max_px:
+                preview = img
+            else:
+                ratio = self._preview_max_px / long_side
+                new_size = (max(1, int(w * ratio)), max(1, int(h * ratio)))
+                preview = img.resize(new_size, Image.Resampling.LANCZOS)
+            elapsed = (time.perf_counter() - t0) * 1000
+            logger.debug("[prefetch] loaded %.1f ms  (%s)", elapsed, path.name)
+            with self._lock:
+                self._cache[path] = (img, preview)
+                self._pending.discard(path)
+        except Exception:
+            logger.debug("[prefetch] failed to load %s", path.name, exc_info=True)
+            with self._lock:
+                self._pending.discard(path)
+
+    def prefetch(self, paths: list[Path]) -> None:
+        """Schedule background loads for given paths, evicting stale entries."""
+        path_set = set(paths)
+        with self._lock:
+            # Evict entries not in the desired set
+            for key in list(self._cache.keys()):
+                if key not in path_set:
+                    del self._cache[key]
+            to_load = [p for p in paths if p not in self._cache and p not in self._pending]
+            self._pending.update(to_load)
+        for p in to_load:
+            threading.Thread(target=self._load_and_store, args=(p,), daemon=True).start()
+
+    def clear(self) -> None:
+        with self._lock:
+            self._cache.clear()
+
+
 class PreviewWindow(QMainWindow):
     """3-pane preview: Before | After-A | After-B.
 
@@ -389,6 +453,7 @@ class PreviewWindow(QMainWindow):
         self._first_show = True
         self._cached_image: Image.Image | None = None
         self._cached_preview: Image.Image | None = None  # downsampled for effects
+        self._prefetch = _PrefetchCache(preview_max_px=1600)
 
         self._build_ui()
         QApplication.instance().installEventFilter(self)
@@ -541,19 +606,23 @@ class PreviewWindow(QMainWindow):
 
         self._user_has_zoomed = False
 
-        # Load original image once and cache for all 3 panes
-        t0 = time.perf_counter()
-        self._cached_image = Image.open(photo.source_path).convert("RGB")
-        logger.debug("[_load_current] Image.open %.1f ms  (%s)",
-                     (time.perf_counter() - t0) * 1000, photo.source_path.name)
+        # Try prefetch cache first; fall back to synchronous load
+        cached = self._prefetch.get(photo.source_path)
+        if cached is not None:
+            self._cached_image, self._cached_preview = cached
+            logger.debug("[_load_current] cache HIT  (%s)", photo.source_path.name)
+        else:
+            t0 = time.perf_counter()
+            self._cached_image = Image.open(photo.source_path).convert("RGB")
+            logger.debug("[_load_current] Image.open %.1f ms  (%s)",
+                         (time.perf_counter() - t0) * 1000, photo.source_path.name)
 
-        # Downsample for preview effects — cap long side at 1600px
-        t0 = time.perf_counter()
-        self._cached_preview = self._make_preview_image(self._cached_image)
-        logger.debug("[_load_current] downsample %.1f ms  (%dx%d → %dx%d)",
-                     (time.perf_counter() - t0) * 1000,
-                     self._cached_image.width, self._cached_image.height,
-                     self._cached_preview.width, self._cached_preview.height)
+            t0 = time.perf_counter()
+            self._cached_preview = self._make_preview_image(self._cached_image)
+            logger.debug("[_load_current] downsample %.1f ms  (%dx%d → %dx%d)",
+                         (time.perf_counter() - t0) * 1000,
+                         self._cached_image.width, self._cached_image.height,
+                         self._cached_preview.width, self._cached_preview.height)
 
         t0 = time.perf_counter()
         self._exif_bar.update_photo(photo.source_path)
@@ -586,6 +655,9 @@ class PreviewWindow(QMainWindow):
         logger.info("[_load_current] TOTAL %.1f ms  (%s)",
                     (time.perf_counter() - t_total) * 1000, photo.source_path.name)
 
+        # Prefetch adjacent photos in background
+        self._prefetch_adjacent()
+
     _PREVIEW_MAX_PX = 1600  # long-side cap for preview effects
 
     @classmethod
@@ -598,6 +670,15 @@ class PreviewWindow(QMainWindow):
         ratio = cls._PREVIEW_MAX_PX / long_side
         new_size = (max(1, int(w * ratio)), max(1, int(h * ratio)))
         return img.resize(new_size, Image.Resampling.LANCZOS)
+
+    def _prefetch_adjacent(self) -> None:
+        """Request background loading of prev/next photos."""
+        targets: list[Path] = [self._photos[self._index].source_path]
+        if self._index + 1 < len(self._photos):
+            targets.append(self._photos[self._index + 1].source_path)
+        if self._index - 1 >= 0:
+            targets.append(self._photos[self._index - 1].source_path)
+        self._prefetch.prefetch(targets)
 
     def _render_before(self, photo: PhotoItem) -> None:
         try:
@@ -778,6 +859,7 @@ class PreviewWindow(QMainWindow):
     # ------------------------------------------------------------------
 
     def closeEvent(self, event) -> None:  # noqa: N802
+        self._prefetch.clear()
         QApplication.instance().removeEventFilter(self)
         super().closeEvent(event)
 
