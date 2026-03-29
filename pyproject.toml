@@ -23,6 +23,7 @@ packages = ["src/myphotoworks"]
 [dependency-groups]
 dev = [
     "pytest>=8.0.0",
+    "pytest-qt>=4.4.0",
     "ruff>=0.3.0",
 ]
 

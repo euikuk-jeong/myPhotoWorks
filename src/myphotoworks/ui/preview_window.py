@@ -4,7 +4,7 @@ from __future__ import annotations
 import copy
 from pathlib import Path
 
-from PyQt6.QtCore import QPointF, Qt, pyqtSignal
+from PyQt6.QtCore import QEvent, QPointF, Qt, pyqtSignal
 from PyQt6.QtGui import (
     QImage,
     QKeyEvent,
@@ -14,6 +14,7 @@ from PyQt6.QtGui import (
 )
 from PyQt6.QtWidgets import (
     QAbstractItemView,
+    QApplication,
     QCheckBox,
     QFormLayout,
     QFrame,
@@ -21,6 +22,7 @@ from PyQt6.QtWidgets import (
     QHeaderView,
     QLabel,
     QMainWindow,
+    QMessageBox,
     QPushButton,
     QScrollArea,
     QSlider,
@@ -377,11 +379,13 @@ class PreviewWindow(QMainWindow):
             photos[0].source_path.parent if photos else Path(".")
         )
         self._index = 0
+        self._saved_count = 0
         self._exif_panel: ExifPanel | None = None
         self._user_has_zoomed = False
         self._first_show = True
 
         self._build_ui()
+        QApplication.instance().installEventFilter(self)
 
     # ------------------------------------------------------------------
     # UI construction
@@ -459,7 +463,7 @@ class PreviewWindow(QMainWindow):
 
         status_bar = QStatusBar()
         self.setStatusBar(status_bar)
-        hint = QLabel("1:Before저장(리사이즈만)  2:After-A저장  3:After-B저장  Space/`:스킵  Del:원본삭제  ←/→:이전/다음  E:EXIF  Home:화면맞춤")
+        hint = QLabel("1:Before저장(리사이즈만)  2:After-A저장  3:After-B저장  Space:스킵  Del:원본삭제  `/←:이전  4/→:다음  E:EXIF  Home:화면맞춤")
         hint.setStyleSheet("color: gray;")
         status_bar.addWidget(hint)
 
@@ -664,6 +668,7 @@ class PreviewWindow(QMainWindow):
             out_path.parent.mkdir(parents=True, exist_ok=True)
             processor.save(img, out_path, settings, photo.source_path)
             self.photo_saved.emit(photo)
+            self._saved_count += 1
         except Exception as e:
             self.statusBar().showMessage(f"저장 실패: {e}", 3000)
             return
@@ -674,7 +679,12 @@ class PreviewWindow(QMainWindow):
             self._index += 1
             self._load_current()
         else:
-            self.statusBar().showMessage("마지막 사진입니다.", 2000)
+            total = len(self._photos)
+            QMessageBox.information(
+                self,
+                "미리보기 완료",
+                f"모든 사진을 검토했습니다.\n\n전체 {total}개 중 {self._saved_count}개가 저장되었습니다.",
+            )
 
     def _resolve_output_path(self, photo: PhotoItem, settings: AppSettings) -> Path:
         from myphotoworks.models.settings import OutputPathMode
@@ -689,6 +699,45 @@ class PreviewWindow(QMainWindow):
         return out_dir / (stem + ".jpg")
 
     # ------------------------------------------------------------------
+    # Window close
+    # ------------------------------------------------------------------
+
+    def closeEvent(self, event) -> None:  # noqa: N802
+        QApplication.instance().removeEventFilter(self)
+        super().closeEvent(event)
+
+    # ------------------------------------------------------------------
+    # Event filter — route child-widget key events to this window
+    # ------------------------------------------------------------------
+
+    def eventFilter(self, obj, event) -> bool:  # noqa: N802
+        if (
+            event.type() == QEvent.Type.KeyPress
+            and isinstance(obj, QWidget)
+            and obj is not self
+            and self.isAncestorOf(obj)
+        ):
+            key = event.key()
+            # E / Home: no conflict with any child widget → always intercept
+            if key in (Qt.Key.Key_E, Qt.Key.Key_Home):
+                self.keyPressEvent(event)
+                return True
+            # Nav keys: let QSlider handle its own adjustment; intercept otherwise
+            if key in (Qt.Key.Key_Left, Qt.Key.Key_Right, Qt.Key.Key_QuoteLeft):
+                if not isinstance(obj, QSlider):
+                    self.keyPressEvent(event)
+                    return True
+            # 1/2/3/4 / Space / Del: let QSpinBox type-input and QCheckBox toggle pass through
+            if key in (
+                Qt.Key.Key_1, Qt.Key.Key_2, Qt.Key.Key_3, Qt.Key.Key_4,
+                Qt.Key.Key_Space, Qt.Key.Key_Delete,
+            ):
+                if not isinstance(obj, (QSpinBox, QCheckBox)):
+                    self.keyPressEvent(event)
+                    return True
+        return super().eventFilter(obj, event)
+
+    # ------------------------------------------------------------------
     # Keyboard shortcuts
     # ------------------------------------------------------------------
 
@@ -700,14 +749,14 @@ class PreviewWindow(QMainWindow):
             self._on_save_2()
         elif key == Qt.Key.Key_3:
             self._on_save_3()
-        elif key in (Qt.Key.Key_Space, Qt.Key.Key_QuoteLeft):
+        elif key == Qt.Key.Key_Space:
             self._on_skip()
+        elif key in (Qt.Key.Key_QuoteLeft, Qt.Key.Key_Left):
+            self._go_prev()
+        elif key in (Qt.Key.Key_4, Qt.Key.Key_Right):
+            self._go_next()
         elif key == Qt.Key.Key_Delete:
             self._on_delete()
-        elif key == Qt.Key.Key_Left:
-            self._go_prev()
-        elif key == Qt.Key.Key_Right:
-            self._go_next()
         elif key == Qt.Key.Key_E:
             if self._exif_panel and self._exif_panel.isVisible():
                 self._exif_panel.hide()
