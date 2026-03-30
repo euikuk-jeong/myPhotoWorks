@@ -7,7 +7,10 @@ import threading
 import time
 from pathlib import Path
 
-from PIL import Image
+from PIL import Image, ImageFile
+
+# Allow Pillow to load truncated/broken JPEG files instead of raising OSError.
+ImageFile.LOAD_TRUNCATED_IMAGES = True
 from PyQt6.QtCore import QEvent, QPointF, Qt, pyqtSignal
 from PyQt6.QtGui import (
     QImage,
@@ -612,17 +615,27 @@ class PreviewWindow(QMainWindow):
             self._cached_image, self._cached_preview = cached
             logger.debug("[_load_current] cache HIT  (%s)", photo.source_path.name)
         else:
-            t0 = time.perf_counter()
-            self._cached_image = Image.open(photo.source_path).convert("RGB")
-            logger.debug("[_load_current] Image.open %.1f ms  (%s)",
-                         (time.perf_counter() - t0) * 1000, photo.source_path.name)
+            try:
+                t0 = time.perf_counter()
+                self._cached_image = Image.open(photo.source_path).convert("RGB")
+                logger.debug("[_load_current] Image.open %.1f ms  (%s)",
+                             (time.perf_counter() - t0) * 1000, photo.source_path.name)
 
-            t0 = time.perf_counter()
-            self._cached_preview = self._make_preview_image(self._cached_image)
-            logger.debug("[_load_current] downsample %.1f ms  (%dx%d → %dx%d)",
-                         (time.perf_counter() - t0) * 1000,
-                         self._cached_image.width, self._cached_image.height,
-                         self._cached_preview.width, self._cached_preview.height)
+                t0 = time.perf_counter()
+                self._cached_preview = self._make_preview_image(self._cached_image)
+                logger.debug("[_load_current] downsample %.1f ms  (%dx%d → %dx%d)",
+                             (time.perf_counter() - t0) * 1000,
+                             self._cached_image.width, self._cached_image.height,
+                             self._cached_preview.width, self._cached_preview.height)
+            except OSError as exc:
+                logger.warning("[_load_current] cannot load %s: %s", photo.source_path.name, exc)
+                from PyQt6.QtWidgets import QMessageBox
+                QMessageBox.warning(
+                    self,
+                    "이미지 로드 실패",
+                    f"{photo.source_path.name}\n\n손상된 이미지 파일입니다:\n{exc}",
+                )
+                return
 
         t0 = time.perf_counter()
         self._exif_bar.update_photo(photo.source_path)

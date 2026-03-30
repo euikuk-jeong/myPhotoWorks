@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-03-30
+
+### Fixed
+- 손상된(truncated) JPEG 파일 로드 시 미리보기 창 크래시 현상 수정
+  - `PIL.ImageFile.LOAD_TRUNCATED_IMAGES = True` 설정으로 부분 로드 허용
+  - `_load_current` 동기 경로에 `OSError` 예외 처리 추가 — 실패 시 경고 다이얼로그 표시
+
 ## [0.9.0] - 2026-03-30
 
 ### Added
@@ -18,5 +25,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 정보(About) 다이얼로그 (버전, 저작권, 아이콘 포함)
 - Windows 실행 파일(PyInstaller) 빌드 지원
 
-[Unreleased]: https://github.com/euikuk-jeong/myPhotoWorks/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/euikuk-jeong/myPhotoWorks/compare/v0.9.1...HEAD
+[0.9.1]: https://github.com/euikuk-jeong/myPhotoWorks/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/euikuk-jeong/myPhotoWorks/releases/tag/v0.9.0
