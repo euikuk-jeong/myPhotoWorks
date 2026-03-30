@@ -1,0 +1,74 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Set up Python
+        run: uv python install 3.11
+
+      - name: Install dependencies
+        run: uv sync --all-groups
+
+      - name: Install PyInstaller
+        run: uv pip install pyinstaller
+
+      - name: Build executable
+        run: |
+          uv run pyinstaller `
+            --name myPhotoWorks `
+            --onefile `
+            --windowed `
+            --icon src/myphotoworks/resources/myphotoworks.ico `
+            src/myphotoworks/main.py
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: myPhotoWorks-windows
+          path: dist/myPhotoWorks.exe
+
+  release:
+    needs: build-windows
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: myPhotoWorks-windows
+          path: dist/
+
+      - name: Extract release notes from CHANGELOG
+        id: changelog
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          VERSION="${TAG#v}"
+          # CHANGELOG.md에서 해당 버전 섹션 추출
+          NOTES=$(awk "/^## \[${VERSION}\]/{flag=1; next} /^## \[/{flag=0} flag" CHANGELOG.md)
+          echo "notes<<EOF" >> $GITHUB_OUTPUT
+          echo "$NOTES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "myPhotoWorks ${{ github.ref_name }}"
+          body: ${{ steps.changelog.outputs.notes }}
+          files: dist/myPhotoWorks.exe
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
