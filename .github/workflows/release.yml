@@ -27,13 +27,7 @@ jobs:
         run: uv pip install pyinstaller
 
       - name: Build executable
-        run: |
-          uv run pyinstaller `
-            --name myPhotoWorks `
-            --onefile `
-            --windowed `
-            --icon src/myphotoworks/resources/myphotoworks.ico `
-            src/myphotoworks/main.py
+        run: uv run pyinstaller myphotoworks.spec
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
