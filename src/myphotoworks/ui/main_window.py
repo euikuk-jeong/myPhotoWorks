@@ -4,11 +4,13 @@ from __future__ import annotations
 from pathlib import Path
 
 from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QAction
 from PyQt6.QtWidgets import (
     QFileDialog,
     QHBoxLayout,
     QLabel,
     QMainWindow,
+    QMenuBar,
     QMessageBox,
     QProgressBar,
     QPushButton,
@@ -48,6 +50,8 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
 
     def _build_ui(self) -> None:
+        self._build_menu()
+
         central = QWidget()
         self.setCentralWidget(central)
         root = QVBoxLayout(central)
@@ -126,9 +130,24 @@ class MainWindow(QMainWindow):
         self._progress_bar.setVisible(False)
         status_bar.addPermanentWidget(self._progress_bar)
 
+    def _build_menu(self) -> None:
+        menu_bar = self.menuBar()
+
+        help_menu = menu_bar.addMenu("도움말(&H)")
+
+        about_action = QAction("정보(&A)...", self)
+        about_action.triggered.connect(self._on_about)
+        help_menu.addAction(about_action)
+
     # ------------------------------------------------------------------
     # Slots — file management
     # ------------------------------------------------------------------
+
+    def _on_about(self) -> None:
+        from myphotoworks.ui.about_dialog import AboutDialog
+
+        dlg = AboutDialog(self)
+        dlg.exec()
 
     def _on_add_files(self) -> None:
         last_dir = self._cfg.get("last_open_dir", str(Path.home()))

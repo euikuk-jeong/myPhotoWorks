@@ -210,3 +210,6 @@ __marimo__/
 # Session context logs and reference images (local only)
 /doc/context/
 /doc/reference/
+
+# PyInstaller build output
+/release/
