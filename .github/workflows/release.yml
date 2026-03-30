@@ -32,7 +32,7 @@ jobs:
             --name myPhotoWorks `
             --onefile `
             --windowed `
-            --icon resources/app_icon.ico `
+            --icon src/myphotoworks/resources/myphotoworks.ico `
             src/myphotoworks/main.py
 
       - name: Upload artifact
