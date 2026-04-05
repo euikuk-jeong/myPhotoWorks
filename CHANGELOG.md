@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.2] - 2026-04-06
+
+### Added
+- EXIF Orientation 태그 기반 이미지 자동 회전 적용
+  - 미리보기 창 (Before 패널, After-A/B 패널, 프리패치 캐시)
+  - 메인 화면 썸네일 패널
+  - 일괄 처리(배치) 경로 (`processor.py` 직접 로드 시)
+  - 레이아웃은 기존 좌→우 3분할 유지, 이미지 픽셀만 올바른 방향으로 보정
+
 ## [0.9.1] - 2026-03-30
 
 ### Fixed
@@ -25,6 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 정보(About) 다이얼로그 (버전, 저작권, 아이콘 포함)
 - Windows 실행 파일(PyInstaller) 빌드 지원
 
-[Unreleased]: https://github.com/euikuk-jeong/myPhotoWorks/compare/v0.9.1...HEAD
+[Unreleased]: https://github.com/euikuk-jeong/myPhotoWorks/compare/v0.9.2...HEAD
+[0.9.2]: https://github.com/euikuk-jeong/myPhotoWorks/compare/v0.9.1...v0.9.2
 [0.9.1]: https://github.com/euikuk-jeong/myPhotoWorks/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/euikuk-jeong/myPhotoWorks/releases/tag/v0.9.0

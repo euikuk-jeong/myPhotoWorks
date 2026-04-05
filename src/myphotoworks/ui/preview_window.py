@@ -7,7 +7,7 @@ import threading
 import time
 from pathlib import Path
 
-from PIL import Image, ImageFile
+from PIL import Image, ImageFile, ImageOps
 
 # Allow Pillow to load truncated/broken JPEG files instead of raising OSError.
 ImageFile.LOAD_TRUNCATED_IMAGES = True
@@ -53,6 +53,11 @@ _BOTTOM_BAR_HEIGHT = 110
 _ZOOM_FACTOR = 1.15
 _ZOOM_MIN = 0.05
 _ZOOM_MAX = 20.0
+
+
+def _open_image(path: Path) -> Image.Image:
+    """Open an image file with EXIF orientation correction applied."""
+    return ImageOps.exif_transpose(Image.open(path)).convert("RGB")
 
 
 # ---------------------------------------------------------------------------
@@ -381,7 +386,7 @@ class _PrefetchCache:
     def _load_and_store(self, path: Path) -> None:
         try:
             t0 = time.perf_counter()
-            img = Image.open(path).convert("RGB")
+            img = _open_image(path)
             w, h = img.size
             long_side = max(w, h)
             if long_side <= self._preview_max_px:
@@ -617,7 +622,7 @@ class PreviewWindow(QMainWindow):
         else:
             try:
                 t0 = time.perf_counter()
-                self._cached_image = Image.open(photo.source_path).convert("RGB")
+                self._cached_image = _open_image(photo.source_path)
                 logger.debug("[_load_current] Image.open %.1f ms  (%s)",
                              (time.perf_counter() - t0) * 1000, photo.source_path.name)
 
@@ -699,8 +704,7 @@ class PreviewWindow(QMainWindow):
             if src is not None:
                 self._before_pane.set_pixmap(self._pil_to_pixmap(src))
             else:
-                with Image.open(photo.source_path) as img:
-                    self._before_pane.set_pixmap(self._pil_to_pixmap(img.convert("RGB")))
+                self._before_pane.set_pixmap(self._pil_to_pixmap(_open_image(photo.source_path)))
         except Exception:
             pass
 
