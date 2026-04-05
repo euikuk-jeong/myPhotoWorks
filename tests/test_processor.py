@@ -195,3 +195,26 @@ class TestSave:
         processor.save(img, out_low, AppSettings(output_quality=10))
 
         assert out_high.stat().st_size > out_low.stat().st_size
+
+    def test_save_resets_orientation_to_normal(self, tmp_path):
+        """저장된 파일의 EXIF Orientation은 항상 1(Normal)이어야 함.
+
+        픽셀이 exif_transpose로 이미 보정된 상태이므로 Orientation 태그를
+        초기화하지 않으면 뷰어가 다시 회전시켜 이중 회전이 발생한다.
+        """
+        import piexif
+
+        # 원본: 90° CW 회전 태그가 붙은 JPEG
+        src = tmp_path / "rotated_src.jpg"
+        Image.new("RGB", (200, 100), (128, 128, 128)).save(
+            src, format="JPEG",
+            exif=piexif.dump({"0th": {piexif.ImageIFD.Orientation: 6}})
+        )
+
+        img = processor.process(make_photo_item(src), AppSettings())
+        out = tmp_path / "out.jpg"
+        processor.save(img, out, AppSettings(), source_path=src)
+
+        saved_exif = piexif.load(str(out))
+        orientation = saved_exif["0th"].get(piexif.ImageIFD.Orientation)
+        assert orientation == 1
