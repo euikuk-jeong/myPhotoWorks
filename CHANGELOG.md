@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - 메인 화면 썸네일 패널
   - 일괄 처리(배치) 경로 (`processor.py` 직접 로드 시)
   - 레이아웃은 기존 좌→우 3분할 유지, 이미지 픽셀만 올바른 방향으로 보정
+  - 저장 시 EXIF Orientation 태그를 1(Normal)로 초기화하여 이중 회전 방지
 
 ## [0.9.1] - 2026-03-30
 
