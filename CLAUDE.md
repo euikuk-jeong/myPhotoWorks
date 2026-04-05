@@ -59,8 +59,9 @@ tests/                    # pytest unit tests
 
 ## Git Rules
 
-- **Markdown files (`.md`) are not committed to git.** This includes context documents under `doc/context/` and any other session notes. The `.gitignore` already excludes `/doc/context/`.
-- When staging files, never include `.md` files unless explicitly instructed by the user.
+- `doc/context/` 하위 세션 요약 `.md` 파일은 git에 포함한다.
+- `CHANGELOG.md`, `README.md` 등 프로젝트 문서 `.md` 파일도 git에 포함한다.
+- When staging files, always include `doc/context/*.md` and project `.md` files.
 
 ## 세션 종료 규칙
 
