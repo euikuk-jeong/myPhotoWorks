@@ -97,6 +97,9 @@ def save(
     if source_path is not None:
         try:
             exif_bytes = piexif.load(str(source_path))
+            # Pixels are already rotated by exif_transpose; reset Orientation to Normal
+            # so viewers don't rotate again.
+            exif_bytes.setdefault("0th", {})[piexif.ImageIFD.Orientation] = 1
             kwargs["exif"] = piexif.dump(exif_bytes)
         except Exception:
             pass
