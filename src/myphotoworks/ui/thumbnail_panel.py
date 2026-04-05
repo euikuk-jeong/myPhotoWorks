@@ -23,8 +23,9 @@ class _ThumbnailLoader(QRunnable):
 
     def run(self) -> None:
         try:
-            from PIL import Image
+            from PIL import Image, ImageOps
             with Image.open(self._photo.source_path) as img:
+                img = ImageOps.exif_transpose(img)
                 img.thumbnail((THUMBNAIL_SIZE, THUMBNAIL_SIZE), Image.Resampling.LANCZOS)
                 img = img.convert("RGB")
                 data = img.tobytes("raw", "RGB")

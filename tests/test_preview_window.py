@@ -12,7 +12,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
-from PIL import Image
+from PIL import Image, ImageOps
 from PyQt6.QtCore import QEvent, Qt
 from PyQt6.QtGui import QKeyEvent
 from PyQt6.QtWidgets import QCheckBox, QSlider, QSpinBox
@@ -426,3 +426,43 @@ class TestPrefetchCache:
 
         cache.clear()
         assert cache.get(path) is None
+
+
+# ---------------------------------------------------------------------------
+# Tests — EXIF transpose on load
+# ---------------------------------------------------------------------------
+
+class TestExifTransposeOnLoad:
+    def test_portrait_jpeg_with_exif_rotation_displayed_correctly(self, tmp_path):
+        """EXIF Orientation=6(90° CW)인 JPEG는 로드 후 세로 방향으로 보정되어야 함."""
+        import piexif
+        # 원본 픽셀은 가로(200x100)이지만 EXIF에 90° CW 회전 정보 기록
+        path = tmp_path / "rotated.jpg"
+        img = Image.new("RGB", (200, 100), (255, 0, 0))
+        exif_dict = {"0th": {piexif.ImageIFD.Orientation: 6}}  # 90° CW → 세로로 보여야 함
+        img.save(path, format="JPEG", exif=piexif.dump(exif_dict))
+
+        # exif_transpose 적용 후 크기 검증
+        loaded = ImageOps.exif_transpose(Image.open(path)).convert("RGB")
+        assert loaded.width == 100  # 회전 후 세로 이미지
+        assert loaded.height == 200
+
+    def test_normal_jpeg_without_rotation_unchanged(self, tmp_path):
+        """EXIF Orientation=1(Normal)인 JPEG는 크기 그대로 유지되어야 함."""
+        import piexif
+        path = tmp_path / "normal.jpg"
+        img = Image.new("RGB", (200, 100), (0, 255, 0))
+        exif_dict = {"0th": {piexif.ImageIFD.Orientation: 1}}
+        img.save(path, format="JPEG", exif=piexif.dump(exif_dict))
+
+        loaded = ImageOps.exif_transpose(Image.open(path)).convert("RGB")
+        assert loaded.width == 200
+        assert loaded.height == 100
+
+    def test_splitter_stays_horizontal_for_portrait_image(self, window):
+        """세로 이미지여도 레이아웃 스플리터는 항상 Horizontal이어야 함."""
+        assert window._splitter.orientation() == Qt.Orientation.Horizontal
+
+    def test_layout_has_no_update_layout_method(self, window):
+        """_update_layout_for_image 메서드는 제거되어 존재하지 않아야 함."""
+        assert not hasattr(window, "_update_layout_for_image")
