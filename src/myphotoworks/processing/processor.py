@@ -6,7 +6,7 @@ import time
 from pathlib import Path
 
 import piexif
-from PIL import Image
+from PIL import Image, ImageOps
 
 from myphotoworks.models.photo_item import PhotoItem
 from myphotoworks.models.settings import AppSettings
@@ -45,7 +45,7 @@ def process(
                      (time.perf_counter() - t_total) * 1000)
     else:
         t0 = time.perf_counter()
-        image = Image.open(photo_item.source_path).convert("RGB")
+        image = ImageOps.exif_transpose(Image.open(photo_item.source_path)).convert("RGB")
         logger.debug("[process] Image.open + convert %.1f ms",
                      (time.perf_counter() - t0) * 1000)
 
