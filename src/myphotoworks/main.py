@@ -6,6 +6,7 @@ from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import QApplication
 
 from myphotoworks.ui.main_window import MainWindow
+from myphotoworks.ui.styles import load_glass_theme
 
 def _get_resource_path(relative: str) -> Path:
     """Return the absolute path to a bundled resource (works both in dev and PyInstaller)."""
@@ -35,7 +36,8 @@ def main() -> None:
     logging.getLogger("PIL").setLevel(logging.WARNING)
     _set_windows_appid()
     app = QApplication(sys.argv)
-    app.setStyle("windowsvista")
+    app.setStyle("Fusion")
+    app.setStyleSheet(load_glass_theme())
     if _ICON_PATH.exists():
         app.setWindowIcon(QIcon(str(_ICON_PATH)))
     window = MainWindow()

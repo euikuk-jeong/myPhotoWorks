@@ -1,0 +1,548 @@
+/* ============================================================
+   myPhotoWorks — Glassmorphism Theme
+   색상 팔레트:
+     배경 그라디언트 : #0d1117 → #161b22 → #1c2333
+     유리 패널 bg   : rgba(255,255,255,0.08)
+     유리 테두리    : rgba(255,255,255,0.18)
+     텍스트 primary : rgba(255,255,255,0.90)
+     텍스트 secondary: rgba(255,255,255,0.50)
+     accent         : rgba(88,166,255,0.90)
+     destructive    : rgba(255,80,80,0.90)
+   ============================================================ */
+
+/* ------------------------------------------------------------
+   전체 기본값
+   ------------------------------------------------------------ */
+QWidget {
+    color: rgba(255, 255, 255, 0.90);
+    font-size: 9pt;
+    selection-background-color: rgba(88, 166, 255, 0.50);
+    selection-color: white;
+}
+
+QMainWindow,
+QDialog {
+    background: transparent;
+}
+
+/* Central widget & generic containers */
+QWidget#centralWidget,
+QStackedWidget,
+QFrame {
+    background: transparent;
+}
+
+/* ------------------------------------------------------------
+   메뉴바 / 메뉴
+   ------------------------------------------------------------ */
+QMenuBar {
+    background: rgba(13, 17, 23, 0.85);
+    color: rgba(255, 255, 255, 0.85);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.10);
+    padding: 2px 4px;
+}
+
+QMenuBar::item {
+    background: transparent;
+    padding: 4px 10px;
+    border-radius: 4px;
+}
+
+QMenuBar::item:selected,
+QMenuBar::item:pressed {
+    background: rgba(255, 255, 255, 0.12);
+}
+
+QMenu {
+    background: rgba(22, 27, 34, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 8px;
+    padding: 4px;
+}
+
+QMenu::item {
+    padding: 6px 20px 6px 12px;
+    border-radius: 4px;
+}
+
+QMenu::item:selected {
+    background: rgba(88, 166, 255, 0.25);
+}
+
+QMenu::separator {
+    height: 1px;
+    background: rgba(255, 255, 255, 0.10);
+    margin: 4px 8px;
+}
+
+/* ------------------------------------------------------------
+   QPushButton — glass button
+   ------------------------------------------------------------ */
+QPushButton {
+    background: rgba(255, 255, 255, 0.10);
+    color: rgba(255, 255, 255, 0.90);
+    border: 1px solid rgba(255, 255, 255, 0.20);
+    border-radius: 6px;
+    padding: 4px 12px;
+    min-width: 60px;
+}
+
+QPushButton:hover {
+    background: rgba(255, 255, 255, 0.22);
+    border: 1px solid rgba(255, 255, 255, 0.35);
+}
+
+QPushButton:pressed {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+QPushButton:disabled {
+    background: rgba(255, 255, 255, 0.04);
+    color: rgba(255, 255, 255, 0.25);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+QPushButton:checked {
+    background: rgba(88, 166, 255, 0.30);
+    border: 1px solid rgba(88, 166, 255, 0.60);
+    color: white;
+}
+
+/* 작은 "..." 버튼 */
+QPushButton[text="..."] {
+    min-width: 30px;
+    padding: 4px 6px;
+}
+
+/* ------------------------------------------------------------
+   QGroupBox — 유리 카드
+   ------------------------------------------------------------ */
+QGroupBox {
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 10px;
+    margin-top: 14px;
+    padding: 8px 6px 6px 6px;
+    font-weight: bold;
+    color: rgba(255, 255, 255, 0.80);
+}
+
+QGroupBox::title {
+    subcontrol-origin: margin;
+    subcontrol-position: top left;
+    left: 12px;
+    top: 0px;
+    padding: 0 6px;
+    color: rgba(255, 255, 255, 0.75);
+    font-size: 8.5pt;
+    font-weight: bold;
+}
+
+/* ------------------------------------------------------------
+   QTabWidget / QTabBar
+   ------------------------------------------------------------ */
+QTabWidget::pane {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 0px 8px 8px 8px;
+    top: -1px;
+}
+
+QTabBar::tab {
+    background: rgba(255, 255, 255, 0.07);
+    color: rgba(255, 255, 255, 0.60);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-bottom: none;
+    border-top-left-radius: 7px;
+    border-top-right-radius: 7px;
+    padding: 5px 14px;
+    min-width: 60px;
+}
+
+QTabBar::tab:selected {
+    background: rgba(88, 166, 255, 0.20);
+    color: rgba(255, 255, 255, 0.95);
+    border-color: rgba(88, 166, 255, 0.45);
+}
+
+QTabBar::tab:hover:!selected {
+    background: rgba(255, 255, 255, 0.14);
+    color: rgba(255, 255, 255, 0.85);
+}
+
+/* ------------------------------------------------------------
+   QSlider
+   ------------------------------------------------------------ */
+QSlider::groove:horizontal {
+    height: 4px;
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 2px;
+}
+
+QSlider::sub-page:horizontal {
+    background: rgba(88, 166, 255, 0.80);
+    border-radius: 2px;
+}
+
+QSlider::handle:horizontal {
+    background: white;
+    border: 1px solid rgba(255, 255, 255, 0.40);
+    width: 14px;
+    height: 14px;
+    margin: -5px 0;
+    border-radius: 7px;
+}
+
+QSlider::handle:horizontal:hover {
+    background: rgba(88, 166, 255, 0.95);
+    border-color: rgba(88, 166, 255, 0.80);
+}
+
+QSlider::handle:horizontal:disabled {
+    background: rgba(255, 255, 255, 0.25);
+}
+
+/* ------------------------------------------------------------
+   QSpinBox / QLineEdit / QComboBox — 입력 필드
+   ------------------------------------------------------------ */
+QSpinBox,
+QLineEdit {
+    background: rgba(0, 0, 0, 0.30);
+    color: rgba(255, 255, 255, 0.90);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 5px;
+    padding: 2px 6px;
+    selection-background-color: rgba(88, 166, 255, 0.50);
+}
+
+QSpinBox:focus,
+QLineEdit:focus {
+    border: 1px solid rgba(88, 166, 255, 0.60);
+    background: rgba(0, 0, 0, 0.40);
+}
+
+QSpinBox:disabled,
+QLineEdit:disabled {
+    color: rgba(255, 255, 255, 0.30);
+    border-color: rgba(255, 255, 255, 0.08);
+    background: rgba(0, 0, 0, 0.15);
+}
+
+QSpinBox::up-button,
+QSpinBox::down-button {
+    background: rgba(255, 255, 255, 0.10);
+    border: none;
+    border-radius: 3px;
+    width: 16px;
+}
+
+QSpinBox::up-button:hover,
+QSpinBox::down-button:hover {
+    background: rgba(255, 255, 255, 0.22);
+}
+
+QComboBox {
+    background: rgba(0, 0, 0, 0.30);
+    color: rgba(255, 255, 255, 0.90);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 5px;
+    padding: 2px 6px;
+}
+
+QComboBox:focus {
+    border: 1px solid rgba(88, 166, 255, 0.60);
+}
+
+QComboBox:disabled {
+    color: rgba(255, 255, 255, 0.30);
+    border-color: rgba(255, 255, 255, 0.08);
+    background: rgba(0, 0, 0, 0.15);
+}
+
+QComboBox::drop-down {
+    border: none;
+    width: 20px;
+}
+
+QComboBox::down-arrow {
+    image: none;
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-top: 5px solid rgba(255, 255, 255, 0.60);
+    width: 0;
+    height: 0;
+}
+
+QComboBox QAbstractItemView {
+    background: rgba(22, 27, 34, 0.97);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 6px;
+    selection-background-color: rgba(88, 166, 255, 0.35);
+    color: rgba(255, 255, 255, 0.90);
+    outline: none;
+}
+
+/* ------------------------------------------------------------
+   QCheckBox / QRadioButton
+   ------------------------------------------------------------ */
+QCheckBox,
+QRadioButton {
+    color: rgba(255, 255, 255, 0.85);
+    spacing: 6px;
+}
+
+QCheckBox::indicator,
+QRadioButton::indicator {
+    width: 14px;
+    height: 14px;
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    background: rgba(0, 0, 0, 0.25);
+}
+
+QCheckBox::indicator {
+    border-radius: 3px;
+}
+
+QRadioButton::indicator {
+    border-radius: 7px;
+}
+
+QCheckBox::indicator:checked {
+    background: rgba(88, 166, 255, 0.80);
+    border-color: rgba(88, 166, 255, 0.90);
+    image: none;
+}
+
+QCheckBox::indicator:checked::after {
+    content: "";
+}
+
+QRadioButton::indicator:checked {
+    background: rgba(88, 166, 255, 0.80);
+    border-color: rgba(88, 166, 255, 0.90);
+}
+
+QCheckBox:disabled,
+QRadioButton:disabled {
+    color: rgba(255, 255, 255, 0.30);
+}
+
+/* ------------------------------------------------------------
+   QLabel
+   ------------------------------------------------------------ */
+QLabel {
+    background: transparent;
+    color: rgba(255, 255, 255, 0.88);
+}
+
+QLabel[class="title-label"] {
+    font-weight: bold;
+    background: rgba(255, 255, 255, 0.10);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 4px;
+    color: rgba(255, 255, 255, 0.90);
+    padding: 3px 6px;
+}
+
+/* ------------------------------------------------------------
+   QSplitter
+   ------------------------------------------------------------ */
+QSplitter::handle {
+    background: rgba(255, 255, 255, 0.10);
+}
+
+QSplitter::handle:horizontal {
+    width: 3px;
+}
+
+QSplitter::handle:vertical {
+    height: 3px;
+}
+
+QSplitter::handle:hover {
+    background: rgba(88, 166, 255, 0.40);
+}
+
+/* ------------------------------------------------------------
+   QStatusBar
+   ------------------------------------------------------------ */
+QStatusBar {
+    background: rgba(13, 17, 23, 0.70);
+    border-top: 1px solid rgba(255, 255, 255, 0.10);
+    color: rgba(255, 255, 255, 0.65);
+    font-size: 8.5pt;
+}
+
+QStatusBar::item {
+    border: none;
+}
+
+/* ------------------------------------------------------------
+   QProgressBar
+   ------------------------------------------------------------ */
+QProgressBar {
+    background: rgba(255, 255, 255, 0.10);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 5px;
+    height: 8px;
+    text-align: center;
+    color: transparent;
+}
+
+QProgressBar::chunk {
+    background: rgba(88, 166, 255, 0.85);
+    border-radius: 4px;
+}
+
+/* ------------------------------------------------------------
+   QListWidget — 썸네일 패널
+   ------------------------------------------------------------ */
+QListWidget {
+    background: rgba(0, 0, 0, 0.25);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 8px;
+    outline: none;
+}
+
+QListWidget::item {
+    color: rgba(255, 255, 255, 0.80);
+    border-radius: 5px;
+    padding: 2px;
+}
+
+QListWidget::item:selected {
+    background: rgba(88, 166, 255, 0.35);
+    border: 1px solid rgba(88, 166, 255, 0.55);
+    color: white;
+}
+
+QListWidget::item:hover:!selected {
+    background: rgba(255, 255, 255, 0.10);
+}
+
+/* ------------------------------------------------------------
+   QTableWidget — EXIF 패널 / ExifBar
+   ------------------------------------------------------------ */
+QTableWidget {
+    background: transparent;
+    alternate-background-color: rgba(255, 255, 255, 0.05);
+    border: none;
+    gridline-color: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.85);
+    outline: none;
+}
+
+QTableWidget::item {
+    padding: 2px 4px;
+    border: none;
+}
+
+QTableWidget::item:selected {
+    background: rgba(88, 166, 255, 0.30);
+    color: white;
+}
+
+QHeaderView {
+    background: transparent;
+}
+
+QHeaderView::section {
+    background: rgba(255, 255, 255, 0.10);
+    color: rgba(255, 255, 255, 0.80);
+    border: none;
+    border-right: 1px solid rgba(255, 255, 255, 0.10);
+    padding: 3px 6px;
+    font-weight: bold;
+}
+
+QHeaderView::section:last {
+    border-right: none;
+}
+
+/* ------------------------------------------------------------
+   QScrollBar — 얇고 반투명
+   ------------------------------------------------------------ */
+QScrollBar:vertical {
+    background: transparent;
+    width: 8px;
+    margin: 2px;
+}
+
+QScrollBar::handle:vertical {
+    background: rgba(255, 255, 255, 0.25);
+    border-radius: 4px;
+    min-height: 20px;
+}
+
+QScrollBar::handle:vertical:hover {
+    background: rgba(255, 255, 255, 0.45);
+}
+
+QScrollBar::add-line:vertical,
+QScrollBar::sub-line:vertical {
+    height: 0px;
+}
+
+QScrollBar:horizontal {
+    background: transparent;
+    height: 8px;
+    margin: 2px;
+}
+
+QScrollBar::handle:horizontal {
+    background: rgba(255, 255, 255, 0.25);
+    border-radius: 4px;
+    min-width: 20px;
+}
+
+QScrollBar::handle:horizontal:hover {
+    background: rgba(255, 255, 255, 0.45);
+}
+
+QScrollBar::add-line:horizontal,
+QScrollBar::sub-line:horizontal {
+    width: 0px;
+}
+
+/* ------------------------------------------------------------
+   QDialogButtonBox 버튼 — glass button 상속
+   ------------------------------------------------------------ */
+QDialogButtonBox QPushButton {
+    min-width: 70px;
+}
+
+/* ------------------------------------------------------------
+   프리뷰 패널 타이틀 레이블 (objectName="pane-title")
+   ------------------------------------------------------------ */
+QLabel#pane-title {
+    font-weight: bold;
+    background: rgba(255, 255, 255, 0.10);
+    border: 1px solid rgba(255, 255, 255, 0.20);
+    border-radius: 4px;
+    color: rgba(255, 255, 255, 0.90);
+    padding: 3px 6px;
+}
+
+/* 삭제 버튼 강조 (objectName="delete-btn") */
+QPushButton#delete-btn {
+    color: rgba(255, 100, 100, 0.95);
+    border-color: rgba(255, 80, 80, 0.35);
+}
+
+QPushButton#delete-btn:hover {
+    background: rgba(255, 80, 80, 0.20);
+    border-color: rgba(255, 80, 80, 0.60);
+    color: white;
+}
+
+/* 힌트 레이블 */
+QLabel#hint-label {
+    color: rgba(255, 255, 255, 0.40);
+    font-size: 8pt;
+}
+
+/* About 다이얼로그 링크 */
+QLabel a {
+    color: rgba(88, 166, 255, 0.90);
+}

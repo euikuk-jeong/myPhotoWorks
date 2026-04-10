@@ -13,8 +13,10 @@ from PIL import Image, ImageFile, ImageOps
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 from PyQt6.QtCore import QEvent, QPointF, Qt, pyqtSignal
 from PyQt6.QtGui import (
+    QColor,
     QImage,
     QKeyEvent,
+    QLinearGradient,
     QPainter,
     QPixmap,
     QWheelEvent,
@@ -82,7 +84,7 @@ class _ImageView(QWidget):
         self.setCursor(Qt.CursorShape.OpenHandCursor)
         self.setAutoFillBackground(True)
         palette = self.palette()
-        palette.setColor(palette.ColorRole.Window, Qt.GlobalColor.white)
+        palette.setColor(palette.ColorRole.Window, QColor(15, 20, 30))
         self.setPalette(palette)
 
         self._pixmap: QPixmap | None = None
@@ -342,8 +344,8 @@ class _Pane(QWidget):
         layout.setSpacing(2)
 
         title_lbl = QLabel(title)
+        title_lbl.setObjectName("pane-title")
         title_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        title_lbl.setStyleSheet("font-weight: bold; background: #555; color: white; padding: 2px;")
         layout.addWidget(title_lbl)
 
         self.image_view = _ImageView()
@@ -463,6 +465,7 @@ class PreviewWindow(QMainWindow):
         self._cached_preview: Image.Image | None = None  # downsampled for effects
         self._prefetch = _PrefetchCache(preview_max_px=1600)
 
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self._build_ui()
         QApplication.instance().installEventFilter(self)
 
@@ -525,7 +528,7 @@ class PreviewWindow(QMainWindow):
         action_bar.addWidget(_btn("3 선택", "3", self._on_save_3))
 
         del_btn = _btn("원본 삭제", "Del", self._on_delete)
-        del_btn.setStyleSheet("color: red;")
+        del_btn.setObjectName("delete-btn")
         action_bar.addWidget(del_btn)
 
         action_bar.addStretch()
@@ -543,12 +546,20 @@ class PreviewWindow(QMainWindow):
         status_bar = QStatusBar()
         self.setStatusBar(status_bar)
         hint = QLabel("1:Before저장(리사이즈만)  2:After-A저장  3:After-B저장  Space:스킵  Del:원본삭제  `/←:이전  4/→:다음  E:EXIF  Home:화면맞춤")
-        hint.setStyleSheet("color: gray;")
+        hint.setObjectName("hint-label")
         status_bar.addWidget(hint)
 
     # ------------------------------------------------------------------
     # Show / resize events
     # ------------------------------------------------------------------
+
+    def paintEvent(self, event) -> None:  # noqa: N802
+        painter = QPainter(self)
+        gradient = QLinearGradient(0, 0, 0, self.height())
+        gradient.setColorAt(0.0, QColor("#0d1117"))
+        gradient.setColorAt(0.5, QColor("#161b22"))
+        gradient.setColorAt(1.0, QColor("#1c2333"))
+        painter.fillRect(self.rect(), gradient)
 
     def showEvent(self, event) -> None:  # noqa: N802
         super().showEvent(event)

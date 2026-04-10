@@ -6,7 +6,7 @@ from importlib.metadata import version, PackageNotFoundError
 from pathlib import Path
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QPixmap
+from PyQt6.QtGui import QColor, QLinearGradient, QPainter, QPixmap
 from PyQt6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
@@ -35,6 +35,7 @@ class AboutDialog(QDialog):
         self.setWindowTitle("myPhotoWorks 정보")
         self.setFixedSize(360, 280)
         self.setWindowFlags(self.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint)
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
 
         layout = QVBoxLayout(self)
         layout.setSpacing(8)
@@ -73,7 +74,7 @@ class AboutDialog(QDialog):
         # Copyright
         copyright_label = QLabel("© 2025 euikuk-jeong. All rights reserved.")
         copyright_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        copyright_label.setStyleSheet("color: gray; font-size: 9pt;")
+        copyright_label.setObjectName("hint-label")
         layout.addWidget(copyright_label)
 
         # GitHub link
@@ -83,7 +84,6 @@ class AboutDialog(QDialog):
         )
         link_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         link_label.setOpenExternalLinks(True)
-        link_label.setStyleSheet("font-size: 9pt;")
         layout.addWidget(link_label)
 
         layout.addSpacing(8)
@@ -92,3 +92,12 @@ class AboutDialog(QDialog):
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok)
         buttons.accepted.connect(self.accept)
         layout.addWidget(buttons)
+
+    def paintEvent(self, event) -> None:  # noqa: N802
+        painter = QPainter(self)
+        gradient = QLinearGradient(0, 0, 0, self.height())
+        gradient.setColorAt(0.0, QColor("#161b22"))
+        gradient.setColorAt(1.0, QColor("#1c2333"))
+        painter.fillRect(self.rect(), gradient)
+        painter.setPen(QColor(255, 255, 255, 46))
+        painter.drawRoundedRect(self.rect().adjusted(0, 0, -1, -1), 8, 8)
