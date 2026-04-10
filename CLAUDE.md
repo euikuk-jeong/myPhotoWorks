@@ -63,6 +63,37 @@ tests/                    # pytest unit tests
 - `CHANGELOG.md`, `README.md` 등 프로젝트 문서 `.md` 파일도 git에 포함한다.
 - When staging files, always include `doc/context/*.md` and project `.md` files.
 
+## Todo 관리 규칙
+
+대화 중 발생하는 할 일·아이디어·개선 사항은 `doc/todo/todo.md` 파일로 관리한다.
+
+### Todo 추가 시점
+- 대화 중 "나중에", "다음에", "추후", "TODO", "개선 필요" 등의 표현이 나올 때
+- 분석 결과 수정이 필요하지만 현재 세션에서 처리하지 않기로 한 항목
+- 사용자가 명시적으로 todo로 남겨달라고 요청할 때
+
+### todo.md 형식
+
+```markdown
+# Todo
+
+## 미완료
+
+- [ ] 항목 설명 <!-- YYYY-MM-DD 추가 -->
+
+## 완료
+
+- [x] 항목 설명 <!-- YYYY-MM-DD 완료 -->
+```
+
+- 날짜는 `<!-- YYYY-MM-DD -->` 주석 형식으로 줄 끝에 표기
+- 새 항목은 "미완료" 섹션 맨 위에 추가
+- `doc/todo/` 디렉토리가 없으면 생성 후 파일 작성
+
+### Git Rules (todo)
+- `doc/todo/todo.md` 파일은 git에 포함한다.
+- When staging files, always include `doc/todo/todo.md`.
+
 ## 세션 종료 규칙
 
 사용자가 "종료", "끝", "bye", "exit", "마무리" 등 세션을 마치려는 의사를 표현하면:
@@ -76,4 +107,5 @@ tests/                    # pytest unit tests
    - 작업 목록 (bullet points)
    - 주요 결정 사항 또는 변경 내용
    - 미완료 작업 또는 다음 단계 (있을 경우)
-4. 파일 저장 후 경로를 사용자에게 알림
+4. `doc/todo/todo.md` 확인 후 이번 세션에서 완료한 항목을 `[x]`로 표시
+5. 파일 저장 후 경로를 사용자에게 알림
