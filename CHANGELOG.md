@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.6] - 2026-04-11
+
+### Added
+- 메인 화면 아이템 우클릭 컨텍스트 메뉴에 "정보" 항목 추가
+- Windows 시스템 메뉴(타이틀바 우클릭)에 "정보" 항목 추가
+- F1 단축키로 정보 다이얼로그 호출
+- 미리보기 창: 마우스 가운데 버튼으로 화면 맞춤(Home과 동일 동작)
+
+### Changed
+- 메인 화면 메뉴바 제거 (정보는 F1 / 우클릭 메뉴로 접근)
+- 미리보기 창: 상태 표시 레이블 제거 → 윈도우 타이틀에 `N/전체 — 파일명` 표시
+- 미리보기 창: 버튼 바에 구분 배경색 적용 (파란 그라디언트 + 상단 구분선)
+- `auto_level`: 채널별 독립 스트레칭 → 루미넌스 기반 단일 LUT 적용 (색상 캐스트 제거)
+- `auto_contrast`: 감마 커브 방식 → `ImageOps.autocontrast(cutoff=1)` 선형 min-max 스트레칭
+
+### Fixed
+- PyQt6 6.10.x에서 `nativeEvent` 오버라이드 시 `super()` 호출로 인한 앱 크래시 수정
+- QSS `content: ""` 속성으로 인한 시작 시 "Unknown property content" 경고 8회 출력 제거
+
 ## [0.9.3] - 2026-04-10
 
 ### Added

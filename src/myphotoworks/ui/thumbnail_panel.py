@@ -3,9 +3,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PyQt6.QtCore import QRunnable, QSize, Qt, QThreadPool, pyqtSignal
+from PyQt6.QtCore import QPoint, QRunnable, QSize, Qt, QThreadPool, pyqtSignal
 from PyQt6.QtGui import QIcon, QPixmap
-from PyQt6.QtWidgets import QListWidget, QListWidgetItem
+from PyQt6.QtWidgets import QListWidget, QListWidgetItem, QMenu
 
 from myphotoworks.models.photo_item import PhotoItem, ProcessStatus
 
@@ -51,6 +51,7 @@ class ThumbnailPanel(QListWidget):
 
     photo_selected = pyqtSignal(object)
     photo_double_clicked = pyqtSignal(object)
+    show_info_requested = pyqtSignal()
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
@@ -61,6 +62,8 @@ class ThumbnailPanel(QListWidget):
         self.setDragDropMode(QListWidget.DragDropMode.DropOnly)
         self.setAcceptDrops(True)
         self.setSelectionMode(QListWidget.SelectionMode.ExtendedSelection)
+        self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.customContextMenuRequested.connect(self._on_context_menu)
 
         self._photos: list[PhotoItem] = []
         self._pool = QThreadPool.globalInstance()
@@ -165,3 +168,13 @@ class ThumbnailPanel(QListWidget):
         row = self.row(item)
         if 0 <= row < len(self._photos):
             self.photo_double_clicked.emit(self._photos[row])
+
+    def _on_context_menu(self, pos: QPoint) -> None:
+        item = self.itemAt(pos)
+        if item is None:
+            return
+        menu = QMenu(self)
+        info_action = menu.addAction("정보")
+        action = menu.exec(self.viewport().mapToGlobal(pos))
+        if action is info_action:
+            self.show_info_requested.emit()
