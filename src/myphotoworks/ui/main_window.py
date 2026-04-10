@@ -4,13 +4,12 @@ from __future__ import annotations
 from pathlib import Path
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QAction, QColor, QLinearGradient, QPainter
+from PyQt6.QtGui import QColor, QKeySequence, QLinearGradient, QPainter, QShortcut
 from PyQt6.QtWidgets import (
     QFileDialog,
     QHBoxLayout,
     QLabel,
     QMainWindow,
-    QMenuBar,
     QMessageBox,
     QProgressBar,
     QPushButton,
@@ -31,6 +30,27 @@ SUPPORTED_FILTER = (
     "모든 파일 (*)"
 )
 
+_SYSMENU_ABOUT_ID = 0x1001  # custom Windows system-menu command ID
+_WM_SYSCOMMAND = 0x0112
+
+# Define Win32 MSG struct once at module level — redefining ctypes.Structure
+# inside a frequently-called method causes memory issues.
+try:
+    import ctypes
+    import ctypes.wintypes
+
+    class _WinMSG(ctypes.Structure):
+        _fields_ = [
+            ("hwnd",    ctypes.wintypes.HWND),
+            ("message", ctypes.c_uint),
+            ("wParam",  ctypes.wintypes.WPARAM),
+            ("lParam",  ctypes.wintypes.LPARAM),
+            ("time",    ctypes.wintypes.DWORD),
+            ("pt",      ctypes.wintypes.POINT),
+        ]
+except Exception:
+    _WinMSG = None  # type: ignore[assignment,misc]
+
 
 class MainWindow(QMainWindow):
     def __init__(self) -> None:
@@ -46,13 +66,14 @@ class MainWindow(QMainWindow):
         self._build_ui()
         self._restore_geometry()
 
+        f1 = QShortcut(QKeySequence(Qt.Key.Key_F1), self)
+        f1.activated.connect(self._on_about)
+
     # ------------------------------------------------------------------
     # UI construction
     # ------------------------------------------------------------------
 
     def _build_ui(self) -> None:
-        self._build_menu()
-
         central = QWidget()
         self.setCentralWidget(central)
         root = QVBoxLayout(central)
@@ -106,6 +127,7 @@ class MainWindow(QMainWindow):
         self._thumb_panel = ThumbnailPanel()
         self._thumb_panel.photo_selected.connect(self._on_photo_selected)
         self._thumb_panel.photo_double_clicked.connect(self._on_photo_double_clicked)
+        self._thumb_panel.show_info_requested.connect(self._on_about)
         splitter.addWidget(self._thumb_panel)
 
         self._settings_panel = SettingsPanel(self._settings)
@@ -130,15 +152,6 @@ class MainWindow(QMainWindow):
         self._progress_bar.setFixedWidth(220)
         self._progress_bar.setVisible(False)
         status_bar.addPermanentWidget(self._progress_bar)
-
-    def _build_menu(self) -> None:
-        menu_bar = self.menuBar()
-
-        help_menu = menu_bar.addMenu("도움말(&H)")
-
-        about_action = QAction("정보(&A)...", self)
-        about_action.triggered.connect(self._on_about)
-        help_menu.addAction(about_action)
 
     # ------------------------------------------------------------------
     # Slots — file management
@@ -298,6 +311,38 @@ class MainWindow(QMainWindow):
                 self.restoreGeometry(QByteArray.fromHex(geom.encode()))
             except Exception:
                 pass
+
+    def showEvent(self, event) -> None:  # noqa: N802
+        super().showEvent(event)
+        if not hasattr(self, "_sysmenu_patched"):
+            self._sysmenu_patched = True
+            self._patch_system_menu()
+
+    def _patch_system_menu(self) -> None:
+        """Windows 시스템 메뉴(타이틀바 우클릭)에 '정보' 항목을 추가한다."""
+        import ctypes
+
+        MF_SEPARATOR = 0x0800
+        MF_STRING = 0x0000
+        hwnd = int(self.winId())
+        hmenu = ctypes.windll.user32.GetSystemMenu(hwnd, False)
+        ctypes.windll.user32.AppendMenuW(hmenu, MF_SEPARATOR, 0, None)
+        ctypes.windll.user32.AppendMenuW(hmenu, MF_STRING, _SYSMENU_ABOUT_ID, "정보")
+
+    def nativeEvent(self, event_type, message):  # noqa: N802
+        # NOTE: super().nativeEvent() crashes in PyQt6 6.10.x — return (False, 0) for
+        # unhandled messages instead, which tells Qt to continue default processing.
+        if _WinMSG is not None and event_type == b"windows_generic_MSG":
+            try:
+                addr = int(message)
+                if addr:
+                    msg = _WinMSG.from_address(addr)
+                    if msg.message == _WM_SYSCOMMAND and msg.wParam == _SYSMENU_ABOUT_ID:
+                        self._on_about()
+                        return True, 0
+            except Exception:
+                pass
+        return False, 0
 
     def paintEvent(self, event) -> None:  # noqa: N802
         painter = QPainter(self)

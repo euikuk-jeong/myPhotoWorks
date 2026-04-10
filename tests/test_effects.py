@@ -61,7 +61,7 @@ class TestApplyLevel:
 
 class TestAutoLevel:
     def test_stretches_to_full_range(self):
-        # Image with values from 50 to 150 per channel
+        """Luminance range 50–150 should be stretched so R channel spans 0–255."""
         arr = np.full((50, 50, 3), 50, dtype=np.uint8)
         arr[:, :, 0] = np.linspace(50, 150, 50 * 50).reshape(50, 50).astype(np.uint8)
         img = Image.fromarray(arr)
@@ -70,18 +70,21 @@ class TestAutoLevel:
         assert r_arr.min() == 0
         assert r_arr.max() == 255
 
-    def test_per_channel_independence(self):
-        """Each channel should be stretched independently."""
-        arr = np.zeros((10, 10, 3), dtype=np.uint8)
-        arr[:, :, 0] = 100  # R: uniform — should stay uniform (no stretch)
-        arr[:, :, 1] = np.linspace(0, 255, 100).reshape(10, 10).astype(np.uint8)
-        arr[:, :, 2] = np.linspace(50, 200, 100).reshape(10, 10).astype(np.uint8)
+    def test_preserves_color_balance(self):
+        """Neutral grey gradient (R==G==B) must stay grey after auto_level.
+
+        Per-channel independent stretching would shift the white balance;
+        the luminance-based single LUT preserves it.
+        """
+        arr = np.zeros((50, 50, 3), dtype=np.uint8)
+        for col in range(50):
+            val = int(col / 49 * 200) + 27  # 27–227, same for all channels
+            arr[:, col, :] = val
         img = Image.fromarray(arr)
         result = auto_level(img)
-        result_arr = np.array(result)
-        # Blue channel should now span 0–255
-        assert result_arr[:, :, 2].min() == 0
-        assert result_arr[:, :, 2].max() == 255
+        r = np.array(result)
+        assert np.allclose(r[:, :, 0], r[:, :, 1], atol=1)
+        assert np.allclose(r[:, :, 1], r[:, :, 2], atol=1)
 
     def test_uniform_image_unchanged(self):
         """Uniform image (no variance) should not crash."""
@@ -96,26 +99,16 @@ class TestAutoContrast:
         result = auto_contrast(img)
         assert result.mode == "RGB"
 
-    def test_brightens_dark_image(self):
-        """Dark image (mean ≈ 50/255) should become brighter after auto_contrast."""
-        img = make_image(color=(50, 50, 50))
+    def test_expands_tonal_range(self):
+        """Gradient image (values 20–219) should span 0–255 after auto_contrast."""
+        img = make_gradient_image()  # pixel values 20–219
         result = auto_contrast(img)
-        assert float(np.array(result).mean()) > float(np.array(img).mean())
-
-    def test_preserves_black_and_white_points(self):
-        """Pixels at 0 stay 0, pixels at 255 stay 255 (gamma preserves endpoints)."""
-        arr = np.zeros((10, 10, 3), dtype=np.uint8)
-        arr[0, 0] = [0, 0, 0]
-        arr[9, 9] = [255, 255, 255]
-        arr[5, 5] = [30, 30, 30]   # dark pixel drives mean low → gamma < 1
-        img = Image.fromarray(arr)
-        result = auto_contrast(img)
-        r = np.array(result)
-        assert r[0, 0, 0] == 0
-        assert r[9, 9, 0] == 255
+        arr = np.array(result)
+        assert arr.min() == 0
+        assert arr.max() == 255
 
     def test_uniform_image_unchanged(self):
-        """Uniform mid-grey (mean == 0.5) leaves gamma ≈ 1 → image nearly unchanged."""
+        """Uniform image has no tonal range to stretch; output must be valid RGB."""
         img = make_image(color=(128, 128, 128))
         result = auto_contrast(img)
         assert result.mode == "RGB"

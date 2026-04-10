@@ -22,72 +22,53 @@ def apply_level(image: Image.Image, level_min: int, level_max: int) -> Image.Ima
 
 
 def auto_level(image: Image.Image) -> Image.Image:
-    """Per-channel histogram stretch with 0.5% percentile clipping.
+    """Histogram stretch with 0.5% percentile clipping, colour-balance preserving.
 
-    Uses per-channel histogram + LUT for O(pixels) mapping instead of
-    sorting-based percentile on the full array.
+    Clip points are derived from the luminance (greyscale) histogram so that
+    all three RGB channels receive the same LUT.  Per-channel independent
+    stretching shifts the white balance, introducing a colour cast.
     """
-    channels = image.split()
-    result_channels = []
-    for ch in channels:
-        hist = ch.histogram()  # 256 bins, O(pixels) single pass
-        total = sum(hist)
-        # Find 0.5th percentile
-        lo, hi = 0, 255
-        acc = 0
-        target_lo = total * 0.005
-        for i in range(256):
-            acc += hist[i]
-            if acc >= target_lo:
-                lo = i
-                break
-        # Find 99.5th percentile
-        acc = 0
-        target_hi = total * 0.995
-        for i in range(256):
-            acc += hist[i]
-            if acc >= target_hi:
-                hi = i
-                break
-        if hi <= lo:
-            result_channels.append(ch)
-            continue
-        scale = 255.0 / (hi - lo)
-        lut = [max(0, min(255, int((i - lo) * scale + 0.5))) for i in range(256)]
-        result_channels.append(ch.point(lut))
-    return Image.merge("RGB", result_channels)
+    gray = image.convert("L")
+    hist = gray.histogram()  # 256 bins from luminance channel
+    total = sum(hist)
+
+    # Find 0.5th percentile (low clip)
+    lo, hi = 0, 255
+    acc = 0
+    target_lo = total * 0.005
+    for i in range(256):
+        acc += hist[i]
+        if acc >= target_lo:
+            lo = i
+            break
+
+    # Find 99.5th percentile (high clip)
+    acc = 0
+    target_hi = total * 0.995
+    for i in range(256):
+        acc += hist[i]
+        if acc >= target_hi:
+            hi = i
+            break
+
+    if hi <= lo:
+        return image
+
+    scale = 255.0 / (hi - lo)
+    lut = [max(0, min(255, int((i - lo) * scale + 0.5))) for i in range(256)]
+    return image.point(lut * 3)  # same LUT for R, G, B
 
 
 def auto_contrast(image: Image.Image) -> Image.Image:
-    """Adaptive gamma correction that brings mean luminance toward mid-grey (0.5).
+    """Min-max tonal stretch with 1% clipping via Pillow's ImageOps.autocontrast.
 
-    Uses a 256-entry LUT for O(pixels) mapping instead of per-pixel
-    float32 power computation.
-
-    Unlike auto_level (linear per-channel stretch), this uses a non-linear
-    tone curve.  It works independently on images that have already been
-    processed by auto_level, making the two operations composable:
-      - auto_level  → removes per-channel colour cast (linear stretch)
-      - auto_contrast → boosts mid-tone brightness / contrast (gamma curve)
+    Clips the darkest and lightest 1% of pixels in each channel, then
+    linearly stretches the remaining range to 0–255.  This matches the
+    standard behaviour of common photo-editing tools and replaces the
+    previous gamma-based mean-targeting approach.
     """
-    import math
-    # Compute mean luminance from histogram to avoid full array allocation
-    hist = image.histogram()  # 256 * 3 entries for RGB
-    total_pixels = image.width * image.height
-    total_sum = 0
-    for ch in range(3):
-        offset = ch * 256
-        for i in range(256):
-            total_sum += i * hist[offset + i]
-    mean_lum = total_sum / (total_pixels * 3 * 255.0)
-
-    if mean_lum <= 0.0 or mean_lum >= 1.0:
-        return image
-    gamma = math.log(0.5) / math.log(mean_lum)
-    gamma = max(0.2, min(4.0, gamma))
-    # Build a single 256-entry LUT and apply to all channels
-    lut = [min(255, int(((i / 255.0) ** gamma) * 255.0 + 0.5)) for i in range(256)]
-    return image.point(lut * 3)
+    from PIL import ImageOps
+    return ImageOps.autocontrast(image, cutoff=1)
 
 
 def apply_brightness_contrast(
