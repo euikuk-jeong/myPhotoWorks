@@ -4,7 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QAction
+from PyQt6.QtGui import QAction, QColor, QLinearGradient, QPainter
 from PyQt6.QtWidgets import (
     QFileDialog,
     QHBoxLayout,
@@ -42,6 +42,7 @@ class MainWindow(QMainWindow):
         self._settings = load_settings(self._cfg)
         self._worker = None
 
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self._build_ui()
         self._restore_geometry()
 
@@ -297,6 +298,14 @@ class MainWindow(QMainWindow):
                 self.restoreGeometry(QByteArray.fromHex(geom.encode()))
             except Exception:
                 pass
+
+    def paintEvent(self, event) -> None:  # noqa: N802
+        painter = QPainter(self)
+        gradient = QLinearGradient(0, 0, 0, self.height())
+        gradient.setColorAt(0.0, QColor("#0d1117"))
+        gradient.setColorAt(0.5, QColor("#161b22"))
+        gradient.setColorAt(1.0, QColor("#1c2333"))
+        painter.fillRect(self.rect(), gradient)
 
     def closeEvent(self, event) -> None:  # noqa: N802
         self._cfg["window_geometry"] = self.saveGeometry().toHex().data().decode()
