@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.3] - 2026-04-10
+
+### Added
+- Glassmorphism UI 테마 적용
+  - 어두운 그라디언트 배경 (`#0d1117 → #161b22 → #1c2333`) 전체 적용
+  - 반투명 유리 질감 패널: `rgba(255,255,255,0.08)` 배경 + `rgba(255,255,255,0.18)` 테두리
+  - `glass_theme.qss` 파일로 전체 위젯 스타일 중앙 관리
+  - 버튼 hover/press 상태별 glass 효과 및 accent 색상(`rgba(88,166,255,0.90)`) 적용
+  - 스크롤바, 슬라이더, 입력 필드, 탭, GroupBox 등 모든 위젯 재스타일링
+
+### Changed
+- 앱 스타일을 `windowsvista` → `Fusion`으로 변경 (QSS 커스터마이징 호환성 향상)
+- `MainWindow`, `PreviewWindow`, `AboutDialog`에 `paintEvent` 추가로 그라디언트 배경 렌더링
+- 미리보기 창 이미지 뷰 배경색 흰색 → 어두운 톤(`#0f141e`)으로 변경
+- 인라인 `setStyleSheet` 호출을 QSS `objectName` 셀렉터 방식으로 통합
+
 ## [0.9.2] - 2026-04-06
 
 ### Added
@@ -35,7 +51,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 정보(About) 다이얼로그 (버전, 저작권, 아이콘 포함)
 - Windows 실행 파일(PyInstaller) 빌드 지원
 
-[Unreleased]: https://github.com/euikuk-jeong/myPhotoWorks/compare/v0.9.2...HEAD
+[Unreleased]: https://github.com/euikuk-jeong/myPhotoWorks/compare/v0.9.3...HEAD
+[0.9.3]: https://github.com/euikuk-jeong/myPhotoWorks/compare/v0.9.2...v0.9.3
 [0.9.2]: https://github.com/euikuk-jeong/myPhotoWorks/compare/v0.9.1...v0.9.2
 [0.9.1]: https://github.com/euikuk-jeong/myPhotoWorks/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/euikuk-jeong/myPhotoWorks/releases/tag/v0.9.0
