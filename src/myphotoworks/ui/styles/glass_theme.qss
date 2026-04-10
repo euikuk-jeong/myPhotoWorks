@@ -314,9 +314,6 @@ QCheckBox::indicator:checked {
     image: none;
 }
 
-QCheckBox::indicator:checked::after {
-    content: "";
-}
 
 QRadioButton::indicator:checked {
     background: rgba(88, 166, 255, 0.80);
