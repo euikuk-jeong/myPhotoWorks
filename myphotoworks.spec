@@ -14,6 +14,7 @@ a = Analysis(
     binaries=[],
     datas=[
         (str(src_dir / "myphotoworks" / "resources"), "myphotoworks/resources"),
+        (str(src_dir / "myphotoworks" / "ui" / "styles"), "myphotoworks/ui/styles"),
     ],
     hiddenimports=[
         "myphotoworks",
