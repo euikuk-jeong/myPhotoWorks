@@ -77,6 +77,7 @@ class _ImageView(QWidget):
     """
 
     view_changed = pyqtSignal(float, QPointF)
+    fit_requested = pyqtSignal()
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
@@ -159,6 +160,8 @@ class _ImageView(QWidget):
             self._drag_start = event.position()
             self._drag_offset_start = QPointF(self._offset)
             self.setCursor(Qt.CursorShape.ClosedHandCursor)
+        elif event.button() == Qt.MouseButton.MiddleButton:
+            self.fit_requested.emit()
 
     def mouseMoveEvent(self, event) -> None:  # noqa: N802
         if self._drag_start is not None:
@@ -485,18 +488,21 @@ class PreviewWindow(QMainWindow):
         self._exif_bar = _ExifBar()
         self._before_pane = _Pane("Before (원본)", self._exif_bar)
         self._before_pane.image_view.view_changed.connect(self._on_view_changed)
+        self._before_pane.image_view.fit_requested.connect(self._on_fit_requested)
         self._splitter.addWidget(self._before_pane)
 
         self._effects_bar_a = _EffectsBar(copy.copy(self._base_settings))
         self._effects_bar_a.settings_changed.connect(self._on_after_a_changed)
         self._after_a_pane = _Pane("After-A", self._effects_bar_a)
         self._after_a_pane.image_view.view_changed.connect(self._on_view_changed)
+        self._after_a_pane.image_view.fit_requested.connect(self._on_fit_requested)
         self._splitter.addWidget(self._after_a_pane)
 
         self._effects_bar_b = _EffectsBar(copy.copy(self._base_settings))
         self._effects_bar_b.settings_changed.connect(self._on_after_b_changed)
         self._after_b_pane = _Pane("After-B", self._effects_bar_b)
         self._after_b_pane.image_view.view_changed.connect(self._on_view_changed)
+        self._after_b_pane.image_view.fit_requested.connect(self._on_fit_requested)
         self._splitter.addWidget(self._after_b_pane)
 
         for i in range(3):
@@ -504,12 +510,19 @@ class PreviewWindow(QMainWindow):
 
         root.addWidget(self._splitter, 1)  # stretch=1 so splitter fills all available height
 
-        self._counter_lbl = QLabel()
-        self._counter_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        root.addWidget(self._counter_lbl)
-
-        # Action button bar
-        action_bar = QHBoxLayout()
+        # Action button bar — wrapped in a container widget for distinct background
+        action_widget = QWidget()
+        action_widget.setObjectName("preview-action-bar")
+        action_widget.setStyleSheet(
+            "#preview-action-bar {"
+            "  background: qlineargradient(x1:0,y1:0,x2:0,y2:1,"
+            "    stop:0 #1a2d4a, stop:1 #0f1e33);"
+            "  border-top: 1px solid rgba(100,160,255,0.18);"
+            "  border-radius: 0px;"
+            "}"
+        )
+        action_bar = QHBoxLayout(action_widget)
+        action_bar.setContentsMargins(8, 6, 8, 6)
         action_bar.setSpacing(6)
 
         def _btn(label: str, shortcut: str, callback) -> QPushButton:
@@ -541,7 +554,7 @@ class PreviewWindow(QMainWindow):
         exif_btn.toggled.connect(self._toggle_exif)
         action_bar.addWidget(exif_btn)
 
-        root.addLayout(action_bar)
+        root.addWidget(action_widget)
 
         status_bar = QStatusBar()
         self.setStatusBar(status_bar)
@@ -619,7 +632,7 @@ class PreviewWindow(QMainWindow):
         t_total = time.perf_counter()
         photo = self._photos[self._index]
         total = len(self._photos)
-        self._counter_lbl.setText(f"{self._index + 1} / {total}  —  {photo.source_path.name}")
+        self.setWindowTitle(f"미리보기  {self._index + 1}/{total}  —  {photo.source_path.name}")
         self._prev_btn.setEnabled(self._index > 0)
         self._next_btn.setEnabled(self._index < total - 1)
 
@@ -750,6 +763,10 @@ class PreviewWindow(QMainWindow):
         for pane in (self._before_pane, self._after_a_pane, self._after_b_pane):
             if pane.image_view is not sender_view:
                 pane.image_view.set_view(zoom, offset)
+
+    def _on_fit_requested(self) -> None:
+        self._user_has_zoomed = False
+        self._force_fit_all()
 
     # ------------------------------------------------------------------
     # Navigation
