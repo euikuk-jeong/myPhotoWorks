@@ -28,27 +28,67 @@ git remote get-url origin
 
 ---
 
-## Step 2: 커밋 (변경사항이 있을 때만)
+## Step 2: 버전 결정
+
+커밋/PR 전에 버전을 확정한다. `pyproject.toml` 업데이트가 릴리즈 커밋에 포함되어야 하므로 이 단계를 먼저 수행한다.
+
+**버전이 인수로 주어진 경우** (예: `/release v1.2.0`): 그대로 사용한다.
+
+**버전이 없는 경우**:
+
+1. 최신 태그 조회 (리모트 포함):
+   ```bash
+   git fetch --tags
+   git tag --sort=-v:refname | head -1
+   ```
+2. 태그가 있으면 **minor 버전 +1** 한다:
+   - `v1.2.3` → `v1.3.0`
+   - `1.2.3` → `1.3.0`
+   - 접미사(`-beta`, `-rc1` 등)는 제거한다
+3. 태그가 없으면 `v0.1.0`을 기본값으로 제안한다
+4. 사용자에게 확인한다:
+   > "버전 태그를 **vX.Y.Z** 로 생성합니다. 다른 버전을 원하시면 입력해주세요 (Enter로 확인):"
+
+---
+
+## Step 3: pyproject.toml 버전 업데이트
+
+확정된 버전(예: `v1.2.0` → `1.2.0`, `v` 접두사 제거)으로 `pyproject.toml`의 `version` 필드를 업데이트한다.
+
+```toml
+# pyproject.toml
+version = "X.Y.Z"   ← 이 줄을 새 버전으로 교체
+```
+
+Edit 도구로 직접 수정한다. 수정 후 사용자에게 변경 내용을 보여준다:
+> "`pyproject.toml` 버전을 `0.9.3` → `1.2.0` 으로 업데이트했습니다."
+
+---
+
+## Step 4: 커밋 (변경사항이 있을 때만)
 
 `git status`에 수정/추가된 파일이 있으면:
 
-1. `git diff --stat`으로 변경 요약을 보여준다
+1. `git diff --stat`으로 변경 요약을 보여준다 (pyproject.toml 포함 여부 확인)
 2. 사용자에게 커밋 메시지를 묻는다:
    > "커밋 메시지를 입력해주세요 (비우면 자동 생성):"
 3. 입력이 없으면 변경 내역을 기반으로 conventional commit 형식으로 자동 생성한다
    - 예: `feat: add image rotation`, `fix: resolve EXIF double-rotation`, `chore: update dependencies`
-4. 스테이징 후 커밋:
+4. `pyproject.toml`을 포함해 스테이징 후 커밋:
    ```bash
    git add -A
    git commit -m "<message>"
    ```
 
-변경사항이 없고 push되지 않은 커밋만 있으면 Step 3으로 바로 넘어간다.  
-변경사항도 없고 미push 커밋도 없으면 사용자에게 알리고, PR+태그만 진행할지 확인한다.
+변경사항이 pyproject.toml 업데이트만 있는 경우에도 커밋한다:
+```bash
+git add pyproject.toml
+git commit -m "chore: bump version to <version>"
+```
 
 ---
 
-## Step 3: Push
+## Step 5: Push
 
 ```bash
 git push -u origin <current-branch>
@@ -59,7 +99,7 @@ git push -u origin <current-branch>
 
 ---
 
-## Step 4: main으로 PR 생성
+## Step 6: main으로 PR 생성
 
 `gh` CLI로 PR을 생성한다:
 
@@ -90,10 +130,10 @@ PR URL을 사용자에게 보여준다.
 
 ---
 
-## Step 5: PR Merge
+## Step 7: PR Merge
 
 ```bash
-gh pr merge <PR-number> --merge --delete-branch
+gh pr merge <PR-number> --merge
 ```
 
 - 기본은 `--merge` (squash/rebase는 사용자 요청 시에만 사용).
@@ -108,28 +148,7 @@ git pull
 
 ---
 
-## Step 6: 버전 결정
-
-**버전이 인수로 주어진 경우** (예: `/release v1.2.0`): 그대로 사용한다.
-
-**버전이 없는 경우**:
-
-1. 최신 태그 조회 (리모트 포함):
-   ```bash
-   git fetch --tags
-   git tag --sort=-v:refname | head -1
-   ```
-2. 태그가 있으면 **minor 버전 +1** 한다:
-   - `v1.2.3` → `v1.3.0`
-   - `1.2.3` → `1.3.0`
-   - 접미사(`-beta`, `-rc1` 등)는 제거한다
-3. 태그가 없으면 `v0.1.0`을 기본값으로 제안한다
-4. 사용자에게 확인한다:
-   > "버전 태그를 **vX.Y.Z** 로 생성합니다. 다른 버전을 원하시면 입력해주세요 (Enter로 확인):"
-
----
-
-## Step 7: 태그 생성 및 GitHub Release
+## Step 8: 태그 생성 및 GitHub Release
 
 main 브랜치에서 태그를 만들고 push한다:
 
@@ -148,31 +167,24 @@ gh release create <version> \
 
 ---
 
-## Step 8: 작업 브랜치로 복귀
+## Step 9: 작업 브랜치로 복귀
 
-릴리즈가 완료되면 원래 작업 브랜치로 돌아온다.
+릴리즈가 완료되면 원래 작업 브랜치로 돌아온다:
 
-`gh pr merge --delete-branch`는 **리모트** 브랜치만 삭제하고 로컬 브랜치는 그대로 남는다. 따라서:
-
-1. 로컬에 원래 브랜치가 남아 있으면 체크아웃한다:
-   ```bash
-   git checkout <original-branch>
-   ```
-2. 로컬 브랜치도 이미 삭제된 경우 (사용자가 별도로 삭제했거나 등), 사용자에게 물어본다:
-   > "작업 브랜치 `<original-branch>`가 로컬에도 없습니다. 같은 이름으로 새 브랜치를 생성할까요?"
-   - 확인하면: `git checkout -b <original-branch>`
-   - 거절하면: main에 그대로 머문다
+```bash
+git checkout <original-branch>
+```
 
 ---
 
-## Step 9: 완료 요약
+## Step 10: 완료 요약
 
 아래 형식으로 결과를 출력한다:
 
 ```
 ✅ Release <version> 완료!
 
-브랜치: <branch> → main (merged & deleted)
+브랜치: <branch> → main (merged)
 태그:   <version>
 PR:     <PR URL>
 Release: <GitHub release URL>
