@@ -53,6 +53,10 @@ class TestParseFilmSim:
         ("Astia",           FilmSim.ASTIA),
         ("Astia/Soft",      FilmSim.ASTIA),
         ("Classic Chrome",  FilmSim.CLASSIC_CHROME),
+        ("Classic",         FilmSim.CLASSIC_CHROME),
+        ("Classic Neg",     FilmSim.CLASSIC_NEG),
+        ("Classic Negative",FilmSim.CLASSIC_NEG),
+        ("ClassicNEGA",     FilmSim.CLASSIC_NEG),
         ("Pro Neg. Hi",     FilmSim.PRO_NEG_HI),
         ("Eterna",          FilmSim.ETERNA),
         ("Eterna/Cinema",   FilmSim.ETERNA),
@@ -256,13 +260,20 @@ class TestBundledFp1Files:
     """Verify the FP1 files shipped with the repository parse cleanly."""
 
     _EXPECTED_SIMS = {
-        "provia":         FilmSim.PROVIA,
-        "velvia":         FilmSim.VELVIA,
-        "astia":          FilmSim.ASTIA,
-        "classic_chrome": FilmSim.CLASSIC_CHROME,
-        "pro_neg_hi":     FilmSim.PRO_NEG_HI,
-        "eterna":         FilmSim.ETERNA,
-        "acros":          FilmSim.ACROS,
+        "provia":              FilmSim.PROVIA,
+        "velvia":              FilmSim.VELVIA,
+        "astia":               FilmSim.ASTIA,
+        "classic_chrome":      FilmSim.CLASSIC_CHROME,
+        "pro_neg_hi":          FilmSim.PRO_NEG_HI,
+        "eterna":              FilmSim.ETERNA,
+        "acros":               FilmSim.ACROS,
+        "Agfa Vista 100":      FilmSim.CLASSIC_NEG,
+        "Fujichrome Sensia 100": FilmSim.PROVIA,
+        "Fujicolor Natura 1600": FilmSim.CLASSIC_NEG,
+        "Kodak Ektar 100":     FilmSim.CLASSIC_CHROME,
+        "Kodak Portra 400":    FilmSim.CLASSIC_CHROME,
+        "Kodak Ultramax 400":  FilmSim.CLASSIC_CHROME,
+        "Urban Vintage Chrome": FilmSim.CLASSIC_CHROME,
     }
 
     @pytest.fixture(scope="class")
