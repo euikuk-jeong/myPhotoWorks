@@ -10,6 +10,7 @@ class FilmSim(str, Enum):
     VELVIA = "velvia"
     ASTIA = "astia"
     CLASSIC_CHROME = "classic_chrome"
+    CLASSIC_NEG = "classic_neg"
     PRO_NEG_HI = "pro_neg_hi"
     ETERNA = "eterna"
     ACROS = "acros"

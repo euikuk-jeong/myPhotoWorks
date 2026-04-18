@@ -28,15 +28,15 @@ _SIM_ORDER: dict[FilmSim, int] = {
     FilmSim.VELVIA:         1,
     FilmSim.ASTIA:          2,
     FilmSim.CLASSIC_CHROME: 3,
-    FilmSim.PRO_NEG_HI:     4,
-    FilmSim.ETERNA:         5,
-    FilmSim.ACROS:          6,
+    FilmSim.CLASSIC_NEG:    4,
+    FilmSim.PRO_NEG_HI:     5,
+    FilmSim.ETERNA:         6,
+    FilmSim.ACROS:          7,
 }
 
 RECIPE_DISPLAY_ORDER: list[str] = sorted(
     BUILTIN_RECIPES.keys(),
-    key=lambda k: (_SIM_ORDER.get(BUILTIN_RECIPES[k].film_sim, 99),
-                   BUILTIN_RECIPES[k].name),
+    key=lambda k: BUILTIN_RECIPES[k].name.lower(),
 )
 
 # ---------------------------------------------------------------------------
@@ -48,6 +48,7 @@ RECIPE_COLORS: dict[str, str] = {
     FilmSim.VELVIA.value:         "#CC3333",
     FilmSim.ASTIA.value:          "#D4A843",
     FilmSim.CLASSIC_CHROME.value: "#7A5C3A",
+    FilmSim.CLASSIC_NEG.value:    "#7A5B8A",
     FilmSim.PRO_NEG_HI.value:     "#D4732A",
     FilmSim.ETERNA.value:         "#4A8A6A",
     FilmSim.ACROS.value:          "#888888",
