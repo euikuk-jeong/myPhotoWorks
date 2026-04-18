@@ -15,7 +15,7 @@ import pytest
 from PIL import Image, ImageOps
 from PyQt6.QtCore import QEvent, Qt
 from PyQt6.QtGui import QKeyEvent
-from PyQt6.QtWidgets import QCheckBox, QSlider, QSpinBox
+from PyQt6.QtWidgets import QComboBox, QSlider, QSpinBox
 
 from myphotoworks.models.photo_item import PhotoItem
 from myphotoworks.models.settings import AppSettings
@@ -242,7 +242,7 @@ class TestEventFilter:
 
     def test_left_key_intercepted_on_non_slider(self, window):
         """Left 키는 QSlider 이외의 자식에서 PreviewWindow로 전달되어야 함."""
-        child = QCheckBox(window)
+        child = QComboBox(window)
         event = self._make_key_event(Qt.Key.Key_Left)
         with patch.object(window, "keyPressEvent") as mock_kpe:
             result = window.eventFilter(child, event)
@@ -260,7 +260,7 @@ class TestEventFilter:
 
     def test_backtick_intercepted_on_non_slider(self, window):
         """` 키는 QSlider 이외의 자식에서 PreviewWindow로 전달되어야 함."""
-        child = QCheckBox(window)
+        child = QComboBox(window)
         event = self._make_key_event(Qt.Key.Key_QuoteLeft)
         with patch.object(window, "keyPressEvent") as mock_kpe:
             result = window.eventFilter(child, event)
@@ -277,7 +277,7 @@ class TestEventFilter:
         mock_kpe.assert_not_called()
 
     def test_key4_intercepted_on_non_input_widget(self, window):
-        """4 키는 QSpinBox/QCheckBox 이외의 자식에서 PreviewWindow로 전달되어야 함."""
+        """4 키는 QSpinBox/QComboBox 이외의 자식에서 PreviewWindow로 전달되어야 함."""
         child = QSlider(window)
         event = self._make_key_event(Qt.Key.Key_4)
         with patch.object(window, "keyPressEvent") as mock_kpe:
@@ -285,9 +285,9 @@ class TestEventFilter:
         assert result is True
         mock_kpe.assert_called_once_with(event)
 
-    def test_space_passes_through_on_checkbox(self, window):
-        """Space 키는 QCheckBox에서는 통과되어야 함 (토글 허용)."""
-        child = QCheckBox(window)
+    def test_space_passes_through_on_combobox(self, window):
+        """Space 키는 QComboBox에서는 통과되어야 함 (드롭다운 허용)."""
+        child = QComboBox(window)
         event = self._make_key_event(Qt.Key.Key_Space)
         with patch.object(window, "keyPressEvent") as mock_kpe:
             result = window.eventFilter(child, event)

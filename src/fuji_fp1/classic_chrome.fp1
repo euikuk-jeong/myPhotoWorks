@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ConversionProfile application="FUJIFILM X RAW STUDIO" version="1.0.0">
+  <PropertyGroup label="Classic Chrome" version="1.0.0">
+    <FilmSimulation>Classic Chrome</FilmSimulation>
+    <GrainEffect>WEAK</GrainEffect>
+    <GrainEffectSize>SMALL</GrainEffectSize>
+    <WhiteBalance>Kelvin</WhiteBalance>
+    <Kelvin>5800</Kelvin>
+    <WhiteBalanceShiftR>0</WhiteBalanceShiftR>
+    <WhiteBalanceShiftB>0</WhiteBalanceShiftB>
+    <HighlightTone>0</HighlightTone>
+    <ShadowTone>-1</ShadowTone>
+    <Color>-2</Color>
+    <Sharpness>0</Sharpness>
+    <NoiseReduction>0</NoiseReduction>
+    <Clarity>0</Clarity>
+  </PropertyGroup>
+</ConversionProfile>
