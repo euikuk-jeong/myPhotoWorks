@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.7] - 2026-04-18
+
+### Added
+- 후지필름 Film Simulation 레시피 보정 기능 (7종 번들: Provia, Velvia, Astia, Classic Chrome, Pro Neg. Hi, Eterna, Acros)
+- `CorrectionMode` enum으로 보정 방식 통합 — 보정 없음 / Auto Level / Auto Contrast / Auto Level+Contrast / 레시피
+- 보정 탭 드롭다운 UI: 색상 아이콘(FilmSim별) + 비활성 섹션 헤더 "── Fujifilm Recipes ──"
+- 레시피 정보 테이블 패널 (필름 시뮬레이션, 화이트밸런스, 톤 커브, 채도, 선명도, 그레인) — SettingsPanel·미리보기 공통
+- `src/fuji_fp1/` 폴더: FP1 XML 파일 보관, 임포트 시 자동 스캔·파싱으로 레시피 목록 생성
+- `Fp1Parser` 클래스: FilmSimulation 문자열 매핑, WB 프리셋→켈빈 변환, 레거시 Saturation 태그 지원
+- 미리보기 150ms 디바운스 + `QRunnable` 백그라운드 렌더링으로 UI 프리즈 방지
+
+### Changed
+- `AppSettings`: `auto_level`/`auto_contrast` bool 필드 → `correction_mode: CorrectionMode` + `recipe_name: str`으로 대체
+- `config.py`: 구 설정 파일(`auto_level`/`auto_contrast` bool) 자동 마이그레이션
+- Clarity 효과: `GaussianBlur(radius=10)` → `BoxBlur(radius=8)` (~10배 속도 개선)
+- 미리보기 하단 바: 모든 패널(원본·A·B) 동일 고정 높이 + 레시피 정보를 `QTableWidget`으로 통일
+
 ## [0.9.6] - 2026-04-11
 
 ### Added
@@ -70,7 +87,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 정보(About) 다이얼로그 (버전, 저작권, 아이콘 포함)
 - Windows 실행 파일(PyInstaller) 빌드 지원
 
-[Unreleased]: https://github.com/euikuk-jeong/myPhotoWorks/compare/v0.9.3...HEAD
+[Unreleased]: https://github.com/euikuk-jeong/myPhotoWorks/compare/v0.9.7...HEAD
+[0.9.7]: https://github.com/euikuk-jeong/myPhotoWorks/compare/v0.9.6...v0.9.7
+[0.9.6]: https://github.com/euikuk-jeong/myPhotoWorks/compare/v0.9.3...v0.9.6
 [0.9.3]: https://github.com/euikuk-jeong/myPhotoWorks/compare/v0.9.2...v0.9.3
 [0.9.2]: https://github.com/euikuk-jeong/myPhotoWorks/compare/v0.9.1...v0.9.2
 [0.9.1]: https://github.com/euikuk-jeong/myPhotoWorks/compare/v0.9.0...v0.9.1
