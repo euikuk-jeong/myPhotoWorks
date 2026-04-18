@@ -1,82 +1,63 @@
-"""Built-in film simulation recipes — bundled at build time."""
+"""Built-in film simulation recipes — loaded from src/fuji_fp1/ at import time."""
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 
 from myphotoworks.models.settings import CorrectionMode
 from myphotoworks.recipes.recipe_data import FilmSim, RecipeData
+from myphotoworks.recipes.fp1_parser import Fp1Parser
 
 # ---------------------------------------------------------------------------
-# Built-in recipe definitions
-# Parameters tuned to approximate Fujifilm film simulation characteristics.
+# FP1 directory — src/fuji_fp1/ relative to this package
+# Layout:  src/myphotoworks/recipes/builtin_recipes.py
+#          src/fuji_fp1/*.fp1
 # ---------------------------------------------------------------------------
 
-BUILTIN_RECIPES: dict[str, RecipeData] = {
-    "provia": RecipeData(
-        name="Provia / Standard",
-        film_sim=FilmSim.PROVIA,
-        tone_shadow=0, tone_highlight=0,
-        color=0, sharpness=0, clarity=0,
-        grain_effect="off", wb_kelvin=5500,
-    ),
-    "velvia": RecipeData(
-        name="Velvia / Vivid",
-        film_sim=FilmSim.VELVIA,
-        tone_shadow=1, tone_highlight=1,
-        color=2, sharpness=1, clarity=1,
-        grain_effect="off", wb_kelvin=5200,
-    ),
-    "astia": RecipeData(
-        name="Astia / Soft",
-        film_sim=FilmSim.ASTIA,
-        tone_shadow=-1, tone_highlight=-1,
-        color=-1, sharpness=0, clarity=0,
-        grain_effect="off", wb_kelvin=5600,
-    ),
-    "classic_chrome": RecipeData(
-        name="Classic Chrome",
-        film_sim=FilmSim.CLASSIC_CHROME,
-        tone_shadow=-1, tone_highlight=0,
-        color=-2, sharpness=0, clarity=0,
-        grain_effect="weak", wb_kelvin=5800,
-    ),
-    "pro_neg_hi": RecipeData(
-        name="Pro Neg. Hi",
-        film_sim=FilmSim.PRO_NEG_HI,
-        tone_shadow=0, tone_highlight=1,
-        color=0, sharpness=1, clarity=1,
-        grain_effect="off", wb_kelvin=5400,
-    ),
-    "eterna": RecipeData(
-        name="Eterna / Cinema",
-        film_sim=FilmSim.ETERNA,
-        tone_shadow=-2, tone_highlight=-1,
-        color=-2, sharpness=-1, clarity=0,
-        grain_effect="weak", wb_kelvin=5700,
-    ),
-    "acros": RecipeData(
-        name="Acros (흑백)",
-        film_sim=FilmSim.ACROS,
-        tone_shadow=0, tone_highlight=0,
-        color=0, sharpness=1, clarity=1,
-        grain_effect="off", wb_kelvin=5500,
-    ),
+_FP1_DIR: Path = Path(__file__).parent.parent.parent / "fuji_fp1"
+
+# Load at import time: key = filename stem (e.g. "velvia"), value = RecipeData
+BUILTIN_RECIPES: dict[str, RecipeData] = Fp1Parser().parse_dir(_FP1_DIR)
+
+# ---------------------------------------------------------------------------
+# Display ordering — film sim canonical order, then alphabetical by name
+# ---------------------------------------------------------------------------
+
+_SIM_ORDER: dict[FilmSim, int] = {
+    FilmSim.PROVIA:         0,
+    FilmSim.VELVIA:         1,
+    FilmSim.ASTIA:          2,
+    FilmSim.CLASSIC_CHROME: 3,
+    FilmSim.PRO_NEG_HI:     4,
+    FilmSim.ETERNA:         5,
+    FilmSim.ACROS:          6,
 }
 
-RECIPE_DISPLAY_ORDER = [
-    "provia", "velvia", "astia", "classic_chrome", "pro_neg_hi", "eterna", "acros"
-]
+RECIPE_DISPLAY_ORDER: list[str] = sorted(
+    BUILTIN_RECIPES.keys(),
+    key=lambda k: (_SIM_ORDER.get(BUILTIN_RECIPES[k].film_sim, 99),
+                   BUILTIN_RECIPES[k].name),
+)
 
-# Colour used for the small square icon in the dropdown
+# ---------------------------------------------------------------------------
+# Colour square icons — keyed by FilmSim value string
+# ---------------------------------------------------------------------------
+
 RECIPE_COLORS: dict[str, str] = {
-    "provia":         "#5B8DB8",  # neutral blue
-    "velvia":         "#CC3333",  # vivid red
-    "astia":          "#D4A843",  # soft yellow
-    "classic_chrome": "#7A5C3A",  # vintage brown
-    "pro_neg_hi":     "#D4732A",  # warm orange
-    "eterna":         "#4A8A6A",  # cinema green
-    "acros":          "#888888",  # monochrome grey
+    FilmSim.PROVIA.value:         "#5B8DB8",
+    FilmSim.VELVIA.value:         "#CC3333",
+    FilmSim.ASTIA.value:          "#D4A843",
+    FilmSim.CLASSIC_CHROME.value: "#7A5C3A",
+    FilmSim.PRO_NEG_HI.value:     "#D4732A",
+    FilmSim.ETERNA.value:         "#4A8A6A",
+    FilmSim.ACROS.value:          "#888888",
 }
+
+
+def recipe_color(recipe: RecipeData) -> str:
+    """Return the hex colour for a recipe's film simulation (default grey)."""
+    return RECIPE_COLORS.get(recipe.film_sim.value, "#888888")
+
 
 # ---------------------------------------------------------------------------
 # Combo-box item helpers
@@ -104,7 +85,7 @@ def build_correction_combo_items() -> list[ComboItem]:
     for key in RECIPE_DISPLAY_ORDER:
         rd = BUILTIN_RECIPES[key]
         items.append(
-            ComboItem(rd.name, CorrectionMode.RECIPE, key, RECIPE_COLORS[key])
+            ComboItem(rd.name, CorrectionMode.RECIPE, key, recipe_color(rd))
         )
     return items
 
