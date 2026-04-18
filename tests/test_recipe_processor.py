@@ -9,6 +9,7 @@ from myphotoworks.recipes.builtin_recipes import (
     BUILTIN_RECIPES,
     RECIPE_DISPLAY_ORDER,
     RECIPE_COLORS,
+    recipe_color,
     build_correction_combo_items,
     ComboItem,
 )
@@ -77,8 +78,9 @@ class TestBuiltinRecipes:
 
     def test_all_recipes_have_colors(self):
         for key in RECIPE_DISPLAY_ORDER:
-            assert key in RECIPE_COLORS
-            assert RECIPE_COLORS[key].startswith("#")
+            rd = BUILTIN_RECIPES[key]
+            color = recipe_color(rd)
+            assert color.startswith("#"), f"No color for recipe '{key}' ({rd.film_sim})"
 
 
 # ---------------------------------------------------------------------------
