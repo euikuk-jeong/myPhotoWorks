@@ -207,8 +207,11 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 
-# Reference images (local only)
-/doc/reference/
+# Documentation and session context (local only)
+doc/
+
+# Claude Code local settings and skills
+.claude/
 
 # PyInstaller build output
 /release/
