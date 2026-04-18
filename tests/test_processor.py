@@ -6,7 +6,7 @@ import pytest
 from PIL import Image
 
 from myphotoworks.models.photo_item import PhotoItem
-from myphotoworks.models.settings import AppSettings, ResizeAxis
+from myphotoworks.models.settings import AppSettings, CorrectionMode, ResizeAxis
 from myphotoworks.processing import processor
 
 
@@ -48,8 +48,7 @@ class TestProcess:
         path = make_jpeg_file(tmp_path, 2000, 1000)
         photo = make_photo_item(path)
         settings = AppSettings(
-            auto_level=True,
-            auto_contrast=True,
+            correction_mode=CorrectionMode.AUTO_LEVEL_CONTRAST,
             brightness=50,
             resize_enabled=True,
             resize_px=1000,
@@ -144,7 +143,7 @@ class TestProcessSourceImage:
         original_data = np.array(cached).copy()
 
         processor.process(
-            photo, AppSettings(auto_level=True, brightness=50),
+            photo, AppSettings(correction_mode=CorrectionMode.AUTO_LEVEL, brightness=50),
             apply_effects=True, source_image=cached,
         )
         assert np.array_equal(np.array(cached), original_data)

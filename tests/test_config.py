@@ -4,7 +4,9 @@ from pathlib import Path
 
 import pytest
 
-from myphotoworks.models.settings import AppSettings, OutputPathMode, ResizeAxis
+from myphotoworks.models.settings import (
+    AppSettings, CorrectionMode, OutputPathMode, ResizeAxis,
+)
 from myphotoworks.utils.config import load_settings, save_settings
 
 
@@ -20,7 +22,7 @@ class TestSaveSettings:
         save_settings(cfg, AppSettings())
         data = cfg["app_settings"]
         expected_keys = {
-            "auto_level", "auto_contrast", "brightness", "contrast",
+            "correction_mode", "recipe_name", "brightness", "contrast",
             "resize_enabled", "resize_axis", "resize_px",
             "output_path_mode", "output_custom_dir",
             "output_prefix", "output_suffix", "output_quality",
@@ -31,6 +33,11 @@ class TestSaveSettings:
         cfg = {}
         save_settings(cfg, AppSettings(resize_axis=ResizeAxis.SHORT))
         assert cfg["app_settings"]["resize_axis"] == "short"
+
+    def test_correction_mode_stored_as_value(self):
+        cfg = {}
+        save_settings(cfg, AppSettings(correction_mode=CorrectionMode.AUTO_LEVEL))
+        assert cfg["app_settings"]["correction_mode"] == "auto_level"
 
     def test_path_stored_as_string(self):
         cfg = {}
@@ -57,8 +64,7 @@ class TestLoadSettings:
     def test_roundtrip_custom_values(self):
         cfg = {}
         original = AppSettings(
-            auto_level=True,
-            auto_contrast=True,
+            correction_mode=CorrectionMode.AUTO_LEVEL_CONTRAST,
             brightness=-30,
             contrast=20,
             resize_enabled=True,
@@ -73,8 +79,7 @@ class TestLoadSettings:
         save_settings(cfg, original)
         restored = load_settings(cfg)
 
-        assert restored.auto_level is True
-        assert restored.auto_contrast is True
+        assert restored.correction_mode == CorrectionMode.AUTO_LEVEL_CONTRAST
         assert restored.brightness == -30
         assert restored.contrast == 20
         assert restored.resize_enabled is True
@@ -84,6 +89,17 @@ class TestLoadSettings:
         assert restored.output_prefix == "web_"
         assert restored.output_suffix == "_sm"
         assert restored.output_quality == 75
+
+    def test_roundtrip_recipe_mode(self):
+        cfg = {}
+        original = AppSettings(
+            correction_mode=CorrectionMode.RECIPE,
+            recipe_name="velvia",
+        )
+        save_settings(cfg, original)
+        restored = load_settings(cfg)
+        assert restored.correction_mode == CorrectionMode.RECIPE
+        assert restored.recipe_name == "velvia"
 
     def test_roundtrip_all_output_path_modes(self):
         for mode in OutputPathMode:
@@ -111,3 +127,21 @@ class TestLoadSettings:
         save_settings(cfg, AppSettings(output_custom_dir=Path("/tmp")))
         json_str = json.dumps(cfg)
         assert json_str  # 직렬화 성공
+
+    def test_backward_compat_auto_level_bool(self):
+        """구 config (auto_level=True) → CorrectionMode.AUTO_LEVEL 변환."""
+        cfg = {"app_settings": {"auto_level": True, "auto_contrast": False}}
+        restored = load_settings(cfg)
+        assert restored.correction_mode == CorrectionMode.AUTO_LEVEL
+
+    def test_backward_compat_auto_contrast_bool(self):
+        """구 config (auto_contrast=True) → CorrectionMode.AUTO_CONTRAST 변환."""
+        cfg = {"app_settings": {"auto_level": False, "auto_contrast": True}}
+        restored = load_settings(cfg)
+        assert restored.correction_mode == CorrectionMode.AUTO_CONTRAST
+
+    def test_backward_compat_both_bools(self):
+        """구 config (auto_level=True, auto_contrast=True) → AUTO_LEVEL_CONTRAST 변환."""
+        cfg = {"app_settings": {"auto_level": True, "auto_contrast": True}}
+        restored = load_settings(cfg)
+        assert restored.correction_mode == CorrectionMode.AUTO_LEVEL_CONTRAST

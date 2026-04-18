@@ -14,13 +14,21 @@ class OutputPathMode(Enum):
     CUSTOM = "custom"          # 직접 지정 경로
 
 
+class CorrectionMode(str, Enum):
+    NONE = "none"
+    AUTO_LEVEL = "auto_level"
+    AUTO_CONTRAST = "auto_contrast"
+    AUTO_LEVEL_CONTRAST = "auto_level_contrast"
+    RECIPE = "recipe"  # recipe_name 필드와 함께 사용
+
+
 @dataclass
 class AppSettings:
     # Effects
-    auto_level: bool = False
-    auto_contrast: bool = False
-    brightness: int = 0   # -100 ~ +100
-    contrast: int = 0     # -100 ~ +100
+    correction_mode: CorrectionMode = CorrectionMode.NONE
+    recipe_name: str = ""   # CorrectionMode.RECIPE 시 builtin recipe key
+    brightness: int = 0     # -100 ~ +100
+    contrast: int = 0       # -100 ~ +100
 
     # Resize
     resize_enabled: bool = False

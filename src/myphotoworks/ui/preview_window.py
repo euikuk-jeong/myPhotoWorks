@@ -11,7 +11,7 @@ from PIL import Image, ImageFile, ImageOps
 
 # Allow Pillow to load truncated/broken JPEG files instead of raising OSError.
 ImageFile.LOAD_TRUNCATED_IMAGES = True
-from PyQt6.QtCore import QEvent, QPointF, Qt, pyqtSignal
+from PyQt6.QtCore import QEvent, QObject, QPointF, QTimer, Qt, pyqtSignal
 from PyQt6.QtGui import (
     QColor,
     QImage,
@@ -21,10 +21,11 @@ from PyQt6.QtGui import (
     QPixmap,
     QWheelEvent,
 )
+from PyQt6.QtCore import QRunnable, QThreadPool, QTimer, pyqtSignal as _pyqtSignal
 from PyQt6.QtWidgets import (
     QAbstractItemView,
     QApplication,
-    QCheckBox,
+    QComboBox,
     QFormLayout,
     QFrame,
     QHBoxLayout,
@@ -33,6 +34,7 @@ from PyQt6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QPushButton,
+
     QSlider,
     QSpinBox,
     QSplitter,
@@ -44,14 +46,19 @@ from PyQt6.QtWidgets import (
 )
 
 from myphotoworks.models.photo_item import PhotoItem
-from myphotoworks.models.settings import AppSettings
+from myphotoworks.models.settings import AppSettings, CorrectionMode
 from myphotoworks.processing import processor
+from myphotoworks.recipes.builtin_recipes import (
+    BUILTIN_RECIPES, build_correction_combo_items, populate_correction_combo,
+)
 from myphotoworks.ui.exif_panel import ExifPanel
 from myphotoworks.utils.exif_reader import read_exif
 
+_COMBO_ITEMS = build_correction_combo_items()
+
 logger = logging.getLogger(__name__)
 
-_BOTTOM_BAR_HEIGHT = 110
+_BOTTOM_BAR_HEIGHT = 200
 _ZOOM_FACTOR = 1.15
 _ZOOM_MIN = 0.05
 _ZOOM_MAX = 20.0
@@ -241,6 +248,16 @@ class _ExifBar(QWidget):
 # _EffectsBar — inline color correction settings (After pane bottom)
 # ---------------------------------------------------------------------------
 
+_RECIPE_ROWS = [
+    ("필름 시뮬레이션", "film_sim"),
+    ("화이트밸런스",    "wb"),
+    ("톤 커브",        "tone"),
+    ("채도",           "color"),
+    ("선명도",         "sharpness"),
+    ("그레인",         "grain"),
+]
+
+
 class _EffectsBar(QWidget):
     settings_changed = pyqtSignal()
 
@@ -253,23 +270,18 @@ class _EffectsBar(QWidget):
     def _build(self) -> None:
         layout = QVBoxLayout(self)
         layout.setContentsMargins(4, 4, 4, 4)
-        layout.setSpacing(4)
+        layout.setSpacing(3)
 
-        row1 = QHBoxLayout()
-        self._auto_level_cb = QCheckBox("Auto Level")
-        self._auto_level_cb.setChecked(self._settings.auto_level)
-        self._auto_level_cb.toggled.connect(self._on_change)
-        row1.addWidget(self._auto_level_cb)
+        # Correction mode dropdown
+        self._mode_combo = QComboBox()
+        populate_correction_combo(self._mode_combo)
+        self._mode_combo.currentIndexChanged.connect(self._on_mode_changed)
+        layout.addWidget(self._mode_combo)
 
-        self._auto_contrast_cb = QCheckBox("Auto Contrast")
-        self._auto_contrast_cb.setChecked(self._settings.auto_contrast)
-        self._auto_contrast_cb.toggled.connect(self._on_change)
-        row1.addWidget(self._auto_contrast_cb)
-        row1.addStretch()
-        layout.addLayout(row1)
-
+        # Brightness / Contrast
         form = QFormLayout()
         form.setSpacing(2)
+        form.setContentsMargins(0, 0, 0, 0)
 
         self._brightness_slider = _MiniSlider(-100, 100, self._settings.brightness)
         self._brightness_slider.valueChanged.connect(self._on_change)
@@ -281,12 +293,89 @@ class _EffectsBar(QWidget):
 
         layout.addLayout(form)
 
+        # Recipe info table — styled like _ExifBar, shown only when recipe mode active
+        self._recipe_table = QTableWidget(len(_RECIPE_ROWS), 2)
+        self._recipe_table.horizontalHeader().setVisible(False)
+        self._recipe_table.horizontalHeader().setSectionResizeMode(
+            0, QHeaderView.ResizeMode.ResizeToContents
+        )
+        self._recipe_table.horizontalHeader().setStretchLastSection(True)
+        self._recipe_table.verticalHeader().setVisible(False)
+        self._recipe_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self._recipe_table.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
+        self._recipe_table.setAlternatingRowColors(True)
+        self._recipe_table.setFrameShape(QFrame.Shape.NoFrame)
+        self._recipe_table.setWordWrap(False)
+
+        for r, (label, _) in enumerate(_RECIPE_ROWS):
+            key_item = QTableWidgetItem(label)
+            key_item.setFlags(Qt.ItemFlag.ItemIsEnabled)
+            self._recipe_table.setItem(r, 0, key_item)
+            val_item = QTableWidgetItem("—")
+            val_item.setFlags(Qt.ItemFlag.ItemIsEnabled)
+            self._recipe_table.setItem(r, 1, val_item)
+
+        self._recipe_table.resizeRowsToContents()
+        layout.addWidget(self._recipe_table)
+
+        self._sync_mode_combo()
+        self._update_recipe_info()
+
     def settings(self) -> AppSettings:
-        self._settings.auto_level = self._auto_level_cb.isChecked()
-        self._settings.auto_contrast = self._auto_contrast_cb.isChecked()
         self._settings.brightness = self._brightness_slider.value()
         self._settings.contrast = self._contrast_slider.value()
         return self._settings
+
+    def load_settings(self, settings: AppSettings) -> None:
+        """Sync UI to new settings without emitting signals."""
+        self._settings = copy.copy(settings)
+        self._sync_mode_combo()
+        self._brightness_slider.set_value(self._settings.brightness)
+        self._contrast_slider.set_value(self._settings.contrast)
+        self._update_recipe_info()
+
+    def _sync_mode_combo(self) -> None:
+        target_mode = self._settings.correction_mode
+        target_key = self._settings.recipe_name
+        self._mode_combo.blockSignals(True)
+        for i, item in enumerate(_COMBO_ITEMS):
+            if item.is_separator:
+                continue
+            if item.mode == target_mode and item.recipe_key == target_key:
+                self._mode_combo.setCurrentIndex(i)
+                break
+        self._mode_combo.blockSignals(False)
+
+    def _update_recipe_info(self) -> None:
+        is_recipe = self._settings.correction_mode == CorrectionMode.RECIPE
+        self._recipe_table.setVisible(is_recipe)
+        if not is_recipe:
+            return
+        rd = BUILTIN_RECIPES.get(self._settings.recipe_name)
+        if rd is None:
+            return
+        values = [
+            rd.film_sim.value,
+            f"{rd.wb_kelvin}K  R:{rd.wb_shift_r:+d}  B:{rd.wb_shift_b:+d}",
+            f"S:{rd.tone_shadow:+d}  H:{rd.tone_highlight:+d}",
+            f"{rd.color:+d}",
+            f"{rd.sharpness:+d}",
+            rd.grain_effect,
+        ]
+        for r, val in enumerate(values):
+            self._recipe_table.item(r, 1).setText(val)
+
+    def _on_mode_changed(self, index: int) -> None:
+        if index < 0 or index >= len(_COMBO_ITEMS):
+            return
+        item = _COMBO_ITEMS[index]
+        if item.is_separator:
+            self._sync_mode_combo()
+            return
+        self._settings.correction_mode = item.mode
+        self._settings.recipe_name = item.recipe_key
+        self._update_recipe_info()
+        self.settings_changed.emit()
 
     def _on_change(self) -> None:
         self.settings_changed.emit()
@@ -321,6 +410,15 @@ class _MiniSlider(QWidget):
 
     def value(self) -> int:
         return self._slider.value()
+
+    def set_value(self, v: int) -> None:
+        """Set value without emitting valueChanged."""
+        self._slider.blockSignals(True)
+        self._spin.blockSignals(True)
+        self._slider.setValue(v)
+        self._spin.setValue(v)
+        self._slider.blockSignals(False)
+        self._spin.blockSignals(False)
 
     def _on_slider(self, v: int) -> None:
         self._spin.blockSignals(True)
@@ -428,6 +526,45 @@ class _PrefetchCache:
             self._cache.clear()
 
 
+# ---------------------------------------------------------------------------
+# _RenderWorker — background QRunnable for After-pane rendering
+# ---------------------------------------------------------------------------
+
+class _RenderWorkerSignals(QObject):
+    done = _pyqtSignal(object, str, int)  # (QPixmap, pane_id, seq)
+
+
+class _RenderWorker(QRunnable):
+    def __init__(
+        self,
+        photo: PhotoItem,
+        settings: AppSettings,
+        source_image,
+        pane_id: str,
+        seq: int,
+    ) -> None:
+        super().__init__()
+        self.setAutoDelete(True)
+        self._photo = photo
+        self._settings = settings
+        self._source = source_image
+        self._pane_id = pane_id
+        self._seq = seq
+        self.signals = _RenderWorkerSignals()
+
+    def run(self) -> None:
+        try:
+            img = processor.process(
+                self._photo, self._settings,
+                apply_effects=True,
+                source_image=self._source,
+            )
+            pixmap = PreviewWindow._pil_to_pixmap(img)
+            self.signals.done.emit(pixmap, self._pane_id, self._seq)
+        except Exception:
+            logger.debug("[_RenderWorker] render failed", exc_info=True)
+
+
 class PreviewWindow(QMainWindow):
     """3-pane preview: Before | After-A | After-B.
 
@@ -467,6 +604,21 @@ class PreviewWindow(QMainWindow):
         self._cached_image: Image.Image | None = None
         self._cached_preview: Image.Image | None = None  # downsampled for effects
         self._prefetch = _PrefetchCache(preview_max_px=1600)
+
+        # Background render sequencing — discard stale results
+        self._render_seq_a: int = 0
+        self._render_seq_b: int = 0
+
+        # Debounce timers: fire 150 ms after last settings change
+        self._debounce_a = QTimer(self)
+        self._debounce_a.setSingleShot(True)
+        self._debounce_a.setInterval(150)
+        self._debounce_a.timeout.connect(self._trigger_render_a)
+
+        self._debounce_b = QTimer(self)
+        self._debounce_b.setSingleShot(True)
+        self._debounce_b.setInterval(150)
+        self._debounce_b.timeout.connect(self._trigger_render_b)
 
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self._build_ui()
@@ -584,7 +736,6 @@ class PreviewWindow(QMainWindow):
         super().resizeEvent(event)
         # Use a deferred call so child widgets have been resized before we read their sizes
         if not self._user_has_zoomed:
-            from PyQt6.QtCore import QTimer
             QTimer.singleShot(0, self._force_fit_all)
 
     def _force_fit_all(self) -> None:
@@ -628,7 +779,6 @@ class PreviewWindow(QMainWindow):
     def _load_current(self) -> None:
         if not self._photos:
             return
-        from PyQt6.QtCore import QTimer
         t_total = time.perf_counter()
         photo = self._photos[self._index]
         total = len(self._photos)
@@ -676,15 +826,9 @@ class PreviewWindow(QMainWindow):
         logger.debug("[_load_current] render_before %.1f ms",
                      (time.perf_counter() - t0) * 1000)
 
-        t0 = time.perf_counter()
-        self._render_after(self._after_a_pane, self._effects_bar_a, photo)
-        logger.debug("[_load_current] render_after_A %.1f ms",
-                     (time.perf_counter() - t0) * 1000)
-
-        t0 = time.perf_counter()
-        self._render_after(self._after_b_pane, self._effects_bar_b, photo)
-        logger.debug("[_load_current] render_after_B %.1f ms",
-                     (time.perf_counter() - t0) * 1000)
+        # Kick off background renders for both After panes
+        self._trigger_render_a()
+        self._trigger_render_b()
 
         # Defer fit so the event loop has processed the new pixmaps
         QTimer.singleShot(0, self._force_fit_all)
@@ -732,20 +876,6 @@ class PreviewWindow(QMainWindow):
         except Exception:
             pass
 
-    def _render_after(self, pane: _Pane, effects_bar: _EffectsBar, photo: PhotoItem) -> None:
-        """Render with color corrections only — no resize in preview."""
-        try:
-            settings = effects_bar.settings()
-            preview_settings = copy.copy(settings)
-            preview_settings.resize_enabled = False   # resize는 저장 시에만 적용
-            img = processor.process(
-                photo, preview_settings, apply_effects=True,
-                source_image=self._cached_preview or self._cached_image,
-            )
-            pane.set_pixmap(self._pil_to_pixmap(img))
-        except Exception:
-            pass
-
     @staticmethod
     def _pil_to_pixmap(img) -> QPixmap:
         data = img.tobytes("raw", "RGB")
@@ -783,20 +913,51 @@ class PreviewWindow(QMainWindow):
             self._load_current()
 
     # ------------------------------------------------------------------
-    # After pane re-render
+    # After pane re-render (debounced + background thread)
     # ------------------------------------------------------------------
 
     def _on_after_a_changed(self) -> None:
-        t0 = time.perf_counter()
-        self._render_after(self._after_a_pane, self._effects_bar_a, self._photos[self._index])
-        logger.debug("[effect_change] After-A re-render %.1f ms",
-                     (time.perf_counter() - t0) * 1000)
+        self._debounce_a.start()
 
     def _on_after_b_changed(self) -> None:
-        t0 = time.perf_counter()
-        self._render_after(self._after_b_pane, self._effects_bar_b, self._photos[self._index])
-        logger.debug("[effect_change] After-B re-render %.1f ms",
-                     (time.perf_counter() - t0) * 1000)
+        self._debounce_b.start()
+
+    def _trigger_render_a(self) -> None:
+        if not self._photos:
+            return
+        self._render_seq_a += 1
+        seq = self._render_seq_a
+        settings = copy.copy(self._effects_bar_a.settings())
+        settings.resize_enabled = False
+        photo = self._photos[self._index]
+        source = self._cached_preview or self._cached_image
+        worker = _RenderWorker(photo, settings, source, "a", seq)
+        worker.signals.done.connect(self._on_render_done)
+        QThreadPool.globalInstance().start(worker)
+
+    def _trigger_render_b(self) -> None:
+        if not self._photos:
+            return
+        self._render_seq_b += 1
+        seq = self._render_seq_b
+        settings = copy.copy(self._effects_bar_b.settings())
+        settings.resize_enabled = False
+        photo = self._photos[self._index]
+        source = self._cached_preview or self._cached_image
+        worker = _RenderWorker(photo, settings, source, "b", seq)
+        worker.signals.done.connect(self._on_render_done)
+        QThreadPool.globalInstance().start(worker)
+
+    def _on_render_done(self, pixmap, pane_id: str, seq: int) -> None:
+        # Discard result if a newer render has been requested
+        if pane_id == "a":
+            if seq < self._render_seq_a:
+                return
+            self._after_a_pane.set_pixmap(pixmap)
+        else:
+            if seq < self._render_seq_b:
+                return
+            self._after_b_pane.set_pixmap(pixmap)
 
     # ------------------------------------------------------------------
     # EXIF floating panel
@@ -929,12 +1090,12 @@ class PreviewWindow(QMainWindow):
                 if not isinstance(obj, QSlider):
                     self.keyPressEvent(event)
                     return True
-            # 1/2/3/4 / Space / Del: let QSpinBox type-input and QCheckBox toggle pass through
+            # 1/2/3/4 / Space / Del: let QSpinBox type-input and QComboBox pass through
             if key in (
                 Qt.Key.Key_1, Qt.Key.Key_2, Qt.Key.Key_3, Qt.Key.Key_4,
                 Qt.Key.Key_Space, Qt.Key.Key_Delete,
             ):
-                if not isinstance(obj, (QSpinBox, QCheckBox)):
+                if not isinstance(obj, (QSpinBox, QComboBox)):
                     self.keyPressEvent(event)
                     return True
         return super().eventFilter(obj, event)
