@@ -10,6 +10,16 @@
 **myPhotoWorks**는 PyQt6 기반의 Windows 데스크톱 애플리케이션입니다.
 다수의 사진을 불러와 리사이즈, 색상 보정(Auto Level / Auto Contrast), 워터마크 적용 후 지정된 경로에 일괄 저장하는 워크플로를 제공합니다.
 
+### PhotoWorks에 대한 감사와 경위
+
+이 프로젝트는 오랫동안 사랑받아 온 **PhotoWorks** 애플리케이션에 깊은 존경과 감사의 마음을 담아 시작되었습니다.
+PhotoWorks는 사진 일괄 처리 분야에서 많은 사용자에게 신뢰받아 온 훌륭한 도구로, 그 기능과 UX에서 큰 영감을 받았습니다.
+
+**myPhotoWorks**는 PhotoWorks의 핵심 워크플로를 기반으로, Python / PyQt6 환경에서 직접 확장·재구현한 프로젝트입니다.
+원본 PhotoWorks 애플리케이션은 아래 링크에서 다운로드할 수 있습니다.
+
+> PhotoWorks 원본 다운로드: [https://cafe.naver.com/photoworks2](https://cafe.naver.com/photoworks2)
+
 ## 주요 기능
 
 - 사진 다중 선택 로드 및 썸네일 목록 표시

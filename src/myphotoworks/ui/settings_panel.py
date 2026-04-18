@@ -6,7 +6,6 @@ from pathlib import Path
 
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import (
-    QCheckBox,
     QComboBox,
     QFileDialog,
     QFormLayout,
@@ -23,9 +22,17 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from myphotoworks.models.settings import AppSettings, OutputPathMode, ResizeAxis
+from myphotoworks.models.settings import (
+    AppSettings, CorrectionMode, OutputPathMode, ResizeAxis,
+)
+from myphotoworks.recipes.builtin_recipes import (
+    BUILTIN_RECIPES, build_correction_combo_items, populate_correction_combo,
+)
 
 RESIZE_PRESETS = [1080, 1920, 2048, 2560, 3840]
+
+# Maps combo index → (CorrectionMode, recipe_key) for SettingsPanel / _EffectsBar
+_COMBO_ITEMS = build_correction_combo_items()
 
 
 class SettingsPanel(QTabWidget):
@@ -65,21 +72,14 @@ class SettingsPanel(QTabWidget):
         layout.setSpacing(10)
         layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
-        # Auto corrections
-        auto_group = QGroupBox("자동 보정")
-        auto_layout = QVBoxLayout(auto_group)
-
-        self._auto_level_cb = QCheckBox("Auto Level")
-        self._auto_level_cb.setChecked(self._settings.auto_level)
-        self._auto_level_cb.toggled.connect(self._on_auto_level)
-        auto_layout.addWidget(self._auto_level_cb)
-
-        self._auto_contrast_cb = QCheckBox("Auto Contrast")
-        self._auto_contrast_cb.setChecked(self._settings.auto_contrast)
-        self._auto_contrast_cb.toggled.connect(self._on_auto_contrast)
-        auto_layout.addWidget(self._auto_contrast_cb)
-
-        layout.addWidget(auto_group)
+        # Correction mode dropdown
+        mode_group = QGroupBox("보정 방식")
+        mode_layout = QVBoxLayout(mode_group)
+        self._mode_combo = QComboBox()
+        populate_correction_combo(self._mode_combo)
+        self._mode_combo.currentIndexChanged.connect(self._on_mode_changed)
+        mode_layout.addWidget(self._mode_combo)
+        layout.addWidget(mode_group)
 
         # Brightness / Contrast
         bc_group = QGroupBox("밝기 / 대비")
@@ -94,13 +94,64 @@ class SettingsPanel(QTabWidget):
         bc_layout.addRow("대비", self._contrast_slider)
 
         layout.addWidget(bc_group)
+
+        # Recipe info (shown only when RECIPE mode is selected)
+        self._recipe_info_group = QGroupBox("레시피 정보")
+        self._recipe_info_layout = QFormLayout(self._recipe_info_group)
+        self._recipe_info_labels: dict[str, QLabel] = {}
+        for field_name in ("필름 시뮬레이션", "화이트밸런스", "톤 커브", "채도", "선명도", "그레인"):
+            lbl = QLabel("—")
+            lbl.setWordWrap(True)
+            self._recipe_info_layout.addRow(field_name, lbl)
+            self._recipe_info_labels[field_name] = lbl
+        layout.addWidget(self._recipe_info_group)
+
+        self._sync_mode_combo()
+        self._update_recipe_info()
         return tab
 
     def _refresh_effects(self) -> None:
-        self._auto_level_cb.setChecked(self._settings.auto_level)
-        self._auto_contrast_cb.setChecked(self._settings.auto_contrast)
+        self._sync_mode_combo()
         self._brightness_slider.setValue(self._settings.brightness)
         self._contrast_slider.setValue(self._settings.contrast)
+        self._update_recipe_info()
+
+    def _sync_mode_combo(self) -> None:
+        """Set combo selection to match current settings without firing signals."""
+        target_mode = self._settings.correction_mode
+        target_key = self._settings.recipe_name
+
+        self._mode_combo.blockSignals(True)
+        for i, item in enumerate(_COMBO_ITEMS):
+            if item.is_separator:
+                continue
+            if item.mode == target_mode and item.recipe_key == target_key:
+                # Find actual combo index (separators occupy an index too)
+                self._mode_combo.setCurrentIndex(i)
+                break
+        self._mode_combo.blockSignals(False)
+
+    def _update_recipe_info(self) -> None:
+        """Show or hide the recipe info group based on current mode."""
+        is_recipe = self._settings.correction_mode == CorrectionMode.RECIPE
+        self._recipe_info_group.setVisible(is_recipe)
+        if not is_recipe:
+            return
+
+        rd = BUILTIN_RECIPES.get(self._settings.recipe_name)
+        if rd is None:
+            return
+
+        self._recipe_info_labels["필름 시뮬레이션"].setText(rd.film_sim.value)
+        self._recipe_info_labels["화이트밸런스"].setText(
+            f"{rd.wb_kelvin}K  R:{rd.wb_shift_r:+d}  B:{rd.wb_shift_b:+d}"
+        )
+        self._recipe_info_labels["톤 커브"].setText(
+            f"S:{rd.tone_shadow:+d}  H:{rd.tone_highlight:+d}"
+        )
+        self._recipe_info_labels["채도"].setText(f"{rd.color:+d}")
+        self._recipe_info_labels["선명도"].setText(f"{rd.sharpness:+d}")
+        self._recipe_info_labels["그레인"].setText(rd.grain_effect)
 
     # ------------------------------------------------------------------
     # 리사이즈 탭
@@ -115,13 +166,12 @@ class SettingsPanel(QTabWidget):
         resize_group = QGroupBox("리사이즈 설정")
         form = QFormLayout(resize_group)
 
-        # 리사이즈 활성화 체크박스
+        from PyQt6.QtWidgets import QCheckBox
         self._resize_cb = QCheckBox("리사이즈 적용")
         self._resize_cb.setChecked(self._settings.resize_enabled)
         self._resize_cb.toggled.connect(self._on_resize_toggled)
         form.addRow(self._resize_cb)
 
-        # 기준 축
         self._axis_combo = QComboBox()
         self._axis_combo.addItem("긴 축", ResizeAxis.LONG)
         self._axis_combo.addItem("짧은 축", ResizeAxis.SHORT)
@@ -130,7 +180,6 @@ class SettingsPanel(QTabWidget):
         self._axis_combo.currentIndexChanged.connect(self._on_axis_changed)
         form.addRow("기준 축", self._axis_combo)
 
-        # 픽셀값 — 직접 입력 + 프리셋
         px_row = QHBoxLayout()
         self._px_spin = QSpinBox()
         self._px_spin.setRange(1, 99999)
@@ -175,7 +224,6 @@ class SettingsPanel(QTabWidget):
         layout.setSpacing(10)
         layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
-        # 저장 경로
         path_group = QGroupBox("저장 경로")
         path_layout = QVBoxLayout(path_group)
 
@@ -209,7 +257,6 @@ class SettingsPanel(QTabWidget):
         layout.addWidget(path_group)
         self._update_custom_dir_controls()
 
-        # 파일명
         name_group = QGroupBox("파일명")
         name_form = QFormLayout(name_group)
 
@@ -225,7 +272,6 @@ class SettingsPanel(QTabWidget):
 
         layout.addWidget(name_group)
 
-        # 품질
         quality_group = QGroupBox("JPG 품질")
         quality_layout = QHBoxLayout(quality_group)
 
@@ -267,12 +313,17 @@ class SettingsPanel(QTabWidget):
     # Slots — effects
     # ------------------------------------------------------------------
 
-    def _on_auto_level(self, checked: bool) -> None:
-        self._settings.auto_level = checked
-        self._emit()
-
-    def _on_auto_contrast(self, checked: bool) -> None:
-        self._settings.auto_contrast = checked
+    def _on_mode_changed(self, index: int) -> None:
+        if index < 0 or index >= len(_COMBO_ITEMS):
+            return
+        item = _COMBO_ITEMS[index]
+        if item.is_separator:
+            # Prevent selecting a separator — revert to previous valid selection
+            self._sync_mode_combo()
+            return
+        self._settings.correction_mode = item.mode
+        self._settings.recipe_name = item.recipe_key
+        self._update_recipe_info()
         self._emit()
 
     def _on_brightness(self, value: int) -> None:

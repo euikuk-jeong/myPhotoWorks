@@ -10,13 +10,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - **Language**: Python (inferred from `.gitignore` configuration)
 - **Potential package managers**: poetry, pdm, pipenv, or uv
-
-## Tech Stack
-
 - **GUI**: PyQt6
 - **Image processing**: Pillow + NumPy
 - **EXIF**: piexif
-- **Package manager**: uv
 
 ## Commands
 
@@ -107,5 +103,5 @@ tests/                    # pytest unit tests
    - 작업 목록 (bullet points)
    - 주요 결정 사항 또는 변경 내용
    - 미완료 작업 또는 다음 단계 (있을 경우)
-4. `doc/todo/todo.md` 확인 후 이번 세션에서 완료한 항목을 `[x]`로 표시
+4. `doc/todo/todo.md` 확인 후 이번 세션에서 완료한 항목을 `[x]`로 표시하고 완료 날짜 주석을 추가
 5. 파일 저장 후 경로를 사용자에게 알림

@@ -4,7 +4,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from myphotoworks.models.settings import AppSettings, OutputPathMode, ResizeAxis
+from myphotoworks.models.settings import (
+    AppSettings, CorrectionMode, OutputPathMode, ResizeAxis,
+)
 
 _CONFIG_PATH = Path.home() / ".myphotoworks" / "config.json"
 _SETTINGS_KEY = "app_settings"
@@ -25,8 +27,8 @@ def save_config(data: dict) -> None:
 def save_settings(cfg: dict, settings: AppSettings) -> None:
     """Serialize AppSettings into cfg dict (call save_config afterwards)."""
     cfg[_SETTINGS_KEY] = {
-        "auto_level": settings.auto_level,
-        "auto_contrast": settings.auto_contrast,
+        "correction_mode": settings.correction_mode.value,
+        "recipe_name": settings.recipe_name,
         "brightness": settings.brightness,
         "contrast": settings.contrast,
         "resize_enabled": settings.resize_enabled,
@@ -46,9 +48,23 @@ def load_settings(cfg: dict) -> AppSettings:
     if not data:
         return AppSettings()
     try:
+        # Backward compat: old configs may have auto_level/auto_contrast bools
+        correction_mode_str = data.get("correction_mode")
+        if correction_mode_str is None:
+            old_al = bool(data.get("auto_level", False))
+            old_ac = bool(data.get("auto_contrast", False))
+            if old_al and old_ac:
+                correction_mode_str = CorrectionMode.AUTO_LEVEL_CONTRAST.value
+            elif old_al:
+                correction_mode_str = CorrectionMode.AUTO_LEVEL.value
+            elif old_ac:
+                correction_mode_str = CorrectionMode.AUTO_CONTRAST.value
+            else:
+                correction_mode_str = CorrectionMode.NONE.value
+
         return AppSettings(
-            auto_level=bool(data.get("auto_level", False)),
-            auto_contrast=bool(data.get("auto_contrast", False)),
+            correction_mode=CorrectionMode(correction_mode_str),
+            recipe_name=str(data.get("recipe_name", "")),
             brightness=int(data.get("brightness", 0)),
             contrast=int(data.get("contrast", 0)),
             resize_enabled=bool(data.get("resize_enabled", False)),

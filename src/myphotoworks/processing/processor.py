@@ -9,7 +9,7 @@ import piexif
 from PIL import Image, ImageOps
 
 from myphotoworks.models.photo_item import PhotoItem
-from myphotoworks.models.settings import AppSettings
+from myphotoworks.models.settings import AppSettings, CorrectionMode
 from myphotoworks.processing import effects
 from myphotoworks.processing.resize import resize_by_axis
 
@@ -25,17 +25,20 @@ def process(
 ) -> Image.Image:
     """Apply the effect chain and return the processed image.
 
-    apply_effects=False skips color corrections (Auto Level, Auto Contrast,
-    Brightness/Contrast) and applies only resize. Used when saving with key '1'
-    (Before pane — resize only).
+    apply_effects=False skips color corrections and applies only resize.
+    Used when saving with key '1' (Before pane — resize only).
 
     source_image: optional pre-loaded PIL Image to skip disk I/O.
 
     Effect chain order:
-      1. Auto Level          (if apply_effects)
-      2. Auto Contrast       (if apply_effects)
-      3. Brightness/Contrast (if apply_effects)
-      4. Resize              (always, if resize_enabled)
+      1. Correction mode  (if apply_effects)
+         NONE              → skip
+         AUTO_LEVEL        → auto_level()
+         AUTO_CONTRAST     → auto_contrast()
+         AUTO_LEVEL_CONTRAST → auto_level() → auto_contrast()
+         RECIPE            → apply_recipe(BUILTIN_RECIPES[recipe_name])
+      2. Brightness/Contrast (if apply_effects and non-zero)
+      3. Resize              (always, if resize_enabled)
     """
     t_total = time.perf_counter()
 
@@ -50,17 +53,35 @@ def process(
                      (time.perf_counter() - t0) * 1000)
 
     if apply_effects:
-        if settings.auto_level:
+        mode = settings.correction_mode
+        if mode == CorrectionMode.AUTO_LEVEL:
             t0 = time.perf_counter()
             image = effects.auto_level(image)
             logger.debug("[process] auto_level %.1f ms",
                          (time.perf_counter() - t0) * 1000)
 
-        if settings.auto_contrast:
+        elif mode == CorrectionMode.AUTO_CONTRAST:
             t0 = time.perf_counter()
             image = effects.auto_contrast(image)
             logger.debug("[process] auto_contrast %.1f ms",
                          (time.perf_counter() - t0) * 1000)
+
+        elif mode == CorrectionMode.AUTO_LEVEL_CONTRAST:
+            t0 = time.perf_counter()
+            image = effects.auto_level(image)
+            image = effects.auto_contrast(image)
+            logger.debug("[process] auto_level+contrast %.1f ms",
+                         (time.perf_counter() - t0) * 1000)
+
+        elif mode == CorrectionMode.RECIPE:
+            t0 = time.perf_counter()
+            from myphotoworks.recipes.builtin_recipes import BUILTIN_RECIPES
+            from myphotoworks.recipes.recipe_processor import apply_recipe
+            recipe = BUILTIN_RECIPES.get(settings.recipe_name)
+            if recipe is not None:
+                image = apply_recipe(image, recipe)
+            logger.debug("[process] recipe(%s) %.1f ms",
+                         settings.recipe_name, (time.perf_counter() - t0) * 1000)
 
         if settings.brightness != 0 or settings.contrast != 0:
             t0 = time.perf_counter()

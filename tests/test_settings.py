@@ -1,8 +1,10 @@
-"""Unit tests for AppSettings, ResizeAxis, OutputPathMode."""
+"""Unit tests for AppSettings, CorrectionMode, ResizeAxis, OutputPathMode."""
 import copy
 from pathlib import Path
 
-from myphotoworks.models.settings import AppSettings, OutputPathMode, ResizeAxis
+from myphotoworks.models.settings import (
+    AppSettings, CorrectionMode, OutputPathMode, ResizeAxis,
+)
 
 
 class TestResizeAxis:
@@ -20,11 +22,24 @@ class TestOutputPathMode:
         assert OutputPathMode.CUSTOM.value == "custom"
 
 
+class TestCorrectionMode:
+    def test_values(self):
+        assert CorrectionMode.NONE.value == "none"
+        assert CorrectionMode.AUTO_LEVEL.value == "auto_level"
+        assert CorrectionMode.AUTO_CONTRAST.value == "auto_contrast"
+        assert CorrectionMode.AUTO_LEVEL_CONTRAST.value == "auto_level_contrast"
+        assert CorrectionMode.RECIPE.value == "recipe"
+
+    def test_roundtrip(self):
+        for member in CorrectionMode:
+            assert CorrectionMode(member.value) == member
+
+
 class TestAppSettingsDefaults:
     def test_effects_defaults(self):
         s = AppSettings()
-        assert s.auto_level is False
-        assert s.auto_contrast is False
+        assert s.correction_mode == CorrectionMode.NONE
+        assert s.recipe_name == ""
         assert s.brightness == 0
         assert s.contrast == 0
 
@@ -55,8 +70,12 @@ class TestAppSettingsCopy:
         assert s1.brightness == 0
 
     def test_copy_preserves_values(self):
-        s1 = AppSettings(auto_level=True, resize_px=2560, output_quality=75)
+        s1 = AppSettings(
+            correction_mode=CorrectionMode.AUTO_LEVEL,
+            resize_px=2560,
+            output_quality=75,
+        )
         s2 = copy.copy(s1)
-        assert s2.auto_level is True
+        assert s2.correction_mode == CorrectionMode.AUTO_LEVEL
         assert s2.resize_px == 2560
         assert s2.output_quality == 75
