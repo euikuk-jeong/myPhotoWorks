@@ -571,9 +571,9 @@ class PreviewWindow(QMainWindow):
     Keyboard shortcuts
     ------------------
     1 / 2 / 3       save from respective pane → next
-    Space / `       skip → next
+    Space           skip → next
     Del             delete original → next
-    ← / →           previous / next photo
+    ← / ` / →       previous / next photo
     E               toggle EXIF floating panel
     """
 
@@ -683,11 +683,11 @@ class PreviewWindow(QMainWindow):
             btn.clicked.connect(callback)
             return btn
 
-        self._prev_btn = _btn("이전", "←", self._go_prev)
-        action_bar.addWidget(self._prev_btn)
         action_bar.addStretch()
 
-        action_bar.addWidget(_btn("스킵", "Space", self._on_skip))
+        self._prev_btn = _btn("이전", "←", self._go_prev)
+        action_bar.addWidget(self._prev_btn)
+
         action_bar.addWidget(_btn("1 선택", "1", self._on_save_1))
         action_bar.addWidget(_btn("2 선택", "2", self._on_save_2))
         action_bar.addWidget(_btn("3 선택", "3", self._on_save_3))
@@ -696,21 +696,22 @@ class PreviewWindow(QMainWindow):
         del_btn.setObjectName("delete-btn")
         action_bar.addWidget(del_btn)
 
-        action_bar.addStretch()
-        self._next_btn = _btn("다음", "→", self._go_next)
-        action_bar.addWidget(self._next_btn)
-
         exif_btn = QPushButton("EXIF\n[E]")
         exif_btn.setFixedHeight(44)
         exif_btn.setCheckable(True)
         exif_btn.toggled.connect(self._toggle_exif)
         action_bar.addWidget(exif_btn)
 
+        self._next_btn = _btn("다음", "→", self._go_next)
+        action_bar.addWidget(self._next_btn)
+
+        action_bar.addStretch()
+
         root.addWidget(action_widget)
 
         status_bar = QStatusBar()
         self.setStatusBar(status_bar)
-        hint = QLabel("1:Before저장(리사이즈만)  2:After-A저장  3:After-B저장  Space:스킵  Del:원본삭제  `/←:이전  4/→:다음  E:EXIF  Home:화면맞춤")
+        hint = QLabel("1:Before저장(리사이즈만)  2:After-A저장  3:After-B저장  Del:원본삭제  `/←:이전  4/→:다음  E:EXIF  Home:화면맞춤")
         hint.setObjectName("hint-label")
         status_bar.addWidget(hint)
 
@@ -1085,17 +1086,16 @@ class PreviewWindow(QMainWindow):
             if key in (Qt.Key.Key_E, Qt.Key.Key_Home):
                 self.keyPressEvent(event)
                 return True
-            # Nav keys: let QSlider handle its own adjustment; intercept otherwise
+            # Nav keys: always intercept (slider is adjusted via mouse/wheel, not keyboard)
             if key in (Qt.Key.Key_Left, Qt.Key.Key_Right, Qt.Key.Key_QuoteLeft):
-                if not isinstance(obj, QSlider):
-                    self.keyPressEvent(event)
-                    return True
-            # 1/2/3/4 / Space / Del: let QSpinBox type-input and QComboBox pass through
+                self.keyPressEvent(event)
+                return True
+            # 1/2/3/4 / Space / Del: let QSpinBox type-input pass through; intercept from all others
             if key in (
                 Qt.Key.Key_1, Qt.Key.Key_2, Qt.Key.Key_3, Qt.Key.Key_4,
                 Qt.Key.Key_Space, Qt.Key.Key_Delete,
             ):
-                if not isinstance(obj, (QSpinBox, QComboBox)):
+                if not isinstance(obj, QSpinBox):
                     self.keyPressEvent(event)
                     return True
         return super().eventFilter(obj, event)
