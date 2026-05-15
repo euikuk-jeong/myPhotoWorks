@@ -207,12 +207,8 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 
-# Documentation: include session context and todo, exclude the rest
-doc/*
-!doc/context/
-!doc/context/**
-!doc/todo/
-!doc/todo/**
+# Documentation and session context (local only)
+doc/
 
 # Claude Code local settings and skills
 .claude/
