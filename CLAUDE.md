@@ -55,9 +55,9 @@ tests/                    # pytest unit tests
 
 ## Git Rules
 
-- `doc/context/` 하위 세션 요약 `.md` 파일은 git에 포함한다.
-- `CHANGELOG.md`, `README.md` 등 프로젝트 문서 `.md` 파일도 git에 포함한다.
-- When staging files, always include `doc/context/*.md` and project `.md` files.
+- `doc/` 디렉토리는 git에 포함하지 않는다 (로컬 전용, `.gitignore`에 등록됨).
+- `CHANGELOG.md`, `README.md` 등 프로젝트 문서 `.md` 파일은 git에 포함한다.
+- When staging files, include project `.md` files but NOT `doc/` contents.
 
 ## Todo 관리 규칙
 
@@ -87,8 +87,7 @@ tests/                    # pytest unit tests
 - `doc/todo/` 디렉토리가 없으면 생성 후 파일 작성
 
 ### Git Rules (todo)
-- `doc/todo/todo.md` 파일은 git에 포함한다.
-- When staging files, always include `doc/todo/todo.md`.
+- `doc/todo/todo.md` 파일은 로컬 전용이며 git에 포함하지 않는다.
 
 ## 세션 종료 규칙
 
