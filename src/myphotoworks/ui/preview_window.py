@@ -959,6 +959,11 @@ class PreviewWindow(QMainWindow):
             if seq < self._render_seq_b:
                 return
             self._after_b_pane.set_pixmap(pixmap)
+        # Async render may land after _force_fit_all() already ran against
+        # stale (previous photo) pixmap dimensions — refit once the new
+        # pixmap is in place, unless the user has manually zoomed/panned.
+        if not self._user_has_zoomed:
+            self._force_fit_all()
 
     # ------------------------------------------------------------------
     # EXIF floating panel
@@ -1086,16 +1091,22 @@ class PreviewWindow(QMainWindow):
             if key in (Qt.Key.Key_E, Qt.Key.Key_Home):
                 self.keyPressEvent(event)
                 return True
-            # Nav keys: always intercept (slider is adjusted via mouse/wheel, not keyboard)
+            # Nav keys: let QSlider arrow-key adjustment pass through; intercept elsewhere
             if key in (Qt.Key.Key_Left, Qt.Key.Key_Right, Qt.Key.Key_QuoteLeft):
-                self.keyPressEvent(event)
-                return True
-            # 1/2/3/4 / Space / Del: let QSpinBox type-input pass through; intercept from all others
+                if not isinstance(obj, QSlider):
+                    self.keyPressEvent(event)
+                    return True
+            # 1/2/3/4 / Del: let QSpinBox type-input pass through; intercept from all others
             if key in (
                 Qt.Key.Key_1, Qt.Key.Key_2, Qt.Key.Key_3, Qt.Key.Key_4,
-                Qt.Key.Key_Space, Qt.Key.Key_Delete,
+                Qt.Key.Key_Delete,
             ):
                 if not isinstance(obj, QSpinBox):
+                    self.keyPressEvent(event)
+                    return True
+            # Space: let QSpinBox type-input and QComboBox dropdown pass through; intercept elsewhere
+            if key == Qt.Key.Key_Space:
+                if not isinstance(obj, (QSpinBox, QComboBox)):
                     self.keyPressEvent(event)
                     return True
         return super().eventFilter(obj, event)

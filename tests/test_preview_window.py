@@ -429,6 +429,56 @@ class TestPrefetchCache:
 
 
 # ---------------------------------------------------------------------------
+# Tests — _on_render_done refit (orientation-switch full-screen bug)
+# ---------------------------------------------------------------------------
+
+class TestRenderDoneRefit:
+    """After-A/B 렌더는 비동기라 _force_fit_all()이 이전 사진 pixmap 크기로
+    먼저 실행될 수 있음. 새 pixmap 도착 시 재계산되어야 화면이 꽉 찬다."""
+
+    def test_refits_when_not_zoomed(self, window):
+        window._user_has_zoomed = False
+        with patch.object(window, "_force_fit_all") as mock_fit:
+            window._on_render_done(MagicMock(), "a", window._render_seq_a)
+            mock_fit.assert_called_once()
+
+    def test_skips_refit_when_user_has_zoomed(self, window):
+        window._user_has_zoomed = True
+        with patch.object(window, "_force_fit_all") as mock_fit:
+            window._on_render_done(MagicMock(), "a", window._render_seq_a)
+            mock_fit.assert_not_called()
+
+    def test_stale_seq_a_skips_refit(self, window):
+        """오래된(stale) 렌더 결과는 pixmap 적용도, refit도 하지 않아야 함."""
+        window._user_has_zoomed = False
+        window._render_seq_a = 5
+        with (
+            patch.object(window._after_a_pane, "set_pixmap") as mock_set,
+            patch.object(window, "_force_fit_all") as mock_fit,
+        ):
+            window._on_render_done(MagicMock(), "a", seq=3)
+            mock_set.assert_not_called()
+            mock_fit.assert_not_called()
+
+    def test_pane_b_refits_when_not_zoomed(self, window):
+        window._user_has_zoomed = False
+        with patch.object(window, "_force_fit_all") as mock_fit:
+            window._on_render_done(MagicMock(), "b", window._render_seq_b)
+            mock_fit.assert_called_once()
+
+    def test_stale_seq_b_skips_refit(self, window):
+        window._user_has_zoomed = False
+        window._render_seq_b = 5
+        with (
+            patch.object(window._after_b_pane, "set_pixmap") as mock_set,
+            patch.object(window, "_force_fit_all") as mock_fit,
+        ):
+            window._on_render_done(MagicMock(), "b", seq=3)
+            mock_set.assert_not_called()
+            mock_fit.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
 # Tests — EXIF transpose on load
 # ---------------------------------------------------------------------------
 
