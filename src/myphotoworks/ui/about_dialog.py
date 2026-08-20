@@ -25,15 +25,15 @@ def _get_version() -> str:
 def _get_icon_path() -> Path:
     base = Path(getattr(sys, "_MEIPASS", Path(__file__).parent.parent))
     if hasattr(sys, "_MEIPASS"):
-        return base / "myphotoworks" / "resources" / "myphotoworks.ico"
-    return base / "resources" / "myphotoworks.ico"
+        return base / "myphotoworks" / "resources" / "myphotoworks.png"
+    return base / "resources" / "myphotoworks.png"
 
 
 class AboutDialog(QDialog):
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self.setWindowTitle("myPhotoWorks 정보")
-        self.setFixedSize(360, 280)
+        self.setFixedSize(360, 300)
         self.setWindowFlags(self.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint)
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
 
@@ -46,13 +46,14 @@ class AboutDialog(QDialog):
         if icon_path.exists():
             icon_label = QLabel()
             pixmap = QPixmap(str(icon_path)).scaled(
-                64, 64,
+                80, 80,
                 Qt.AspectRatioMode.KeepAspectRatio,
                 Qt.TransformationMode.SmoothTransformation,
             )
             icon_label.setPixmap(pixmap)
+            icon_label.setFixedSize(80, 80)
             icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            layout.addWidget(icon_label)
+            layout.addWidget(icon_label, alignment=Qt.AlignmentFlag.AlignHCenter)
 
         # App name
         name_label = QLabel("<b style='font-size:16pt'>myPhotoWorks</b>")
