@@ -249,14 +249,15 @@ class TestEventFilter:
         assert result is True
         mock_kpe.assert_called_once_with(event)
 
-    def test_left_key_passes_through_on_slider(self, window):
-        """Left 키는 QSlider에서는 통과되어야 함 (슬라이더 조절 허용)."""
+    def test_left_key_intercepted_on_slider(self, window):
+        """Left 키는 QSlider에서도 가로채져야 함 (슬라이더는 마우스/휠 조작 전용,
+        내비게이션 단축키 우선 — v0.9.8 결정)."""
         child = QSlider(window)
         event = self._make_key_event(Qt.Key.Key_Left)
         with patch.object(window, "keyPressEvent") as mock_kpe:
             result = window.eventFilter(child, event)
-        assert result is False
-        mock_kpe.assert_not_called()
+        assert result is True
+        mock_kpe.assert_called_once_with(event)
 
     def test_backtick_intercepted_on_non_slider(self, window):
         """` 키는 QSlider 이외의 자식에서 PreviewWindow로 전달되어야 함."""
@@ -285,14 +286,15 @@ class TestEventFilter:
         assert result is True
         mock_kpe.assert_called_once_with(event)
 
-    def test_space_passes_through_on_combobox(self, window):
-        """Space 키는 QComboBox에서는 통과되어야 함 (드롭다운 허용)."""
+    def test_space_intercepted_on_combobox(self, window):
+        """Space 키는 QComboBox에서도 가로채져야 함 (레시피 콤보 선택 후
+        1/2/3 저장 단축키 즉시 동작 우선 — v0.9.8 결정)."""
         child = QComboBox(window)
         event = self._make_key_event(Qt.Key.Key_Space)
         with patch.object(window, "keyPressEvent") as mock_kpe:
             result = window.eventFilter(child, event)
-        assert result is False
-        mock_kpe.assert_not_called()
+        assert result is True
+        mock_kpe.assert_called_once_with(event)
 
     def test_non_child_widget_not_intercepted(self, window, qapp):
         """PreviewWindow의 자식이 아닌 위젯의 키 이벤트는 가로채지 않아야 함."""
