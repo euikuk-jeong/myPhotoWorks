@@ -49,7 +49,7 @@ class AppSettings:
     similarity_slider: int = 50          # 0 strict .. 100 loose
     time_gap: float = 2.0                # seconds
     global_clustering: bool = False      # compare against all groups, not just neighbours
-    use_exif_hints: bool = False         # focal length / lens / aperture consistency
+    use_exif_hints: bool = True          # focal length / lens / aperture consistency
     weight_sharpness: float = 0.5
     weight_exposure: float = 0.3
     weight_color: float = 0.2

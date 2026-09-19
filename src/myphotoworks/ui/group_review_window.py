@@ -3,8 +3,17 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PyQt6.QtCore import QSize, Qt, QTimer, pyqtSignal
-from PyQt6.QtGui import QColor, QIcon, QKeySequence, QLinearGradient, QPainter, QPixmap, QShortcut
+from PyQt6.QtCore import QObject, QRunnable, QSize, Qt, QThreadPool, QTimer, pyqtSignal
+from PyQt6.QtGui import (
+    QColor,
+    QIcon,
+    QImage,
+    QKeySequence,
+    QLinearGradient,
+    QPainter,
+    QPixmap,
+    QShortcut,
+)
 from PyQt6.QtWidgets import (
     QFileDialog,
     QHBoxLayout,
@@ -15,6 +24,7 @@ from PyQt6.QtWidgets import (
     QMessageBox,
     QProgressBar,
     QPushButton,
+    QSplitter,
     QVBoxLayout,
     QWidget,
 )
@@ -26,19 +36,45 @@ from myphotoworks.models.photo_item import PhotoItem
 from myphotoworks.models.settings import AppSettings
 from myphotoworks.processing.export import export_adopted
 from myphotoworks.ui.thumbnail_panel import _PHOTO_ROLE, _CardDelegate, checkbox_rect
+from myphotoworks.ui.zoom_view import ZoomPanView
 
 STRIP_ICON = 130
+STRIP_ROW_HEIGHT = STRIP_ICON + 52   # one row of cards incl. name and padding
+PREVIEW_LONG_SIDE = 1000   # fitted preview
+DETAIL_LONG_SIDE = 4000    # loaded on first zoom-in so detail is not blurry
+DETAIL_CACHE = 3
 
 
-def _pil_to_pixmap(img) -> QPixmap:
-    from PyQt6.QtGui import QImage
-
+def _pil_to_qimage(img) -> QImage:
     img = img.convert("RGB")
-    qimg = QImage(
+    return QImage(
         img.tobytes("raw", "RGB"), img.width, img.height, img.width * 3,
         QImage.Format.Format_RGB888,
     ).copy()
-    return QPixmap.fromImage(qimg)
+
+
+def _pil_to_pixmap(img) -> QPixmap:
+    return QPixmap.fromImage(_pil_to_qimage(img))
+
+
+class _DetailSignals(QObject):
+    loaded = pyqtSignal(str, QImage)
+
+
+class _DetailLoader(QRunnable):
+    """Loads a large copy of one photo in the background (for zoomed-in inspection)."""
+
+    def __init__(self, path: Path, signals: _DetailSignals) -> None:
+        super().__init__()
+        self._path = path
+        self._signals = signals
+
+    def run(self) -> None:
+        try:
+            image = _pil_to_qimage(load_analysis_image(self._path, DETAIL_LONG_SIDE))
+        except Exception:
+            return
+        self._signals.loaded.emit(str(self._path), image)
 
 
 class _GroupList(QListWidget):
@@ -71,7 +107,7 @@ class _GroupList(QListWidget):
 
 
 class _Strip(QListWidget):
-    """Horizontal film strip of one group's photos."""
+    """Photo cards of one group. They wrap onto new rows and scroll vertically."""
 
     adoption_toggle_requested = pyqtSignal(object, bool)
     context_requested = pyqtSignal(object, object)  # photo, global pos
@@ -80,11 +116,16 @@ class _Strip(QListWidget):
         super().__init__()
         self.setViewMode(QListWidget.ViewMode.IconMode)
         self.setFlow(QListWidget.Flow.LeftToRight)
-        self.setWrapping(False)
+        self.setWrapping(True)
+        self.setResizeMode(QListWidget.ResizeMode.Adjust)
+        self.setUniformItemSizes(True)
+        self.setVerticalScrollMode(QListWidget.ScrollMode.ScrollPerPixel)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.setMovement(QListWidget.Movement.Static)
         self.setIconSize(QSize(STRIP_ICON, STRIP_ICON))
         self.setSpacing(6)
-        self.setFixedHeight(STRIP_ICON + 52)
+        self.setMinimumHeight(STRIP_ROW_HEIGHT)
         self.setDragEnabled(True)
         self.setDragDropMode(QListWidget.DragDropMode.DragOnly)
         self.setSelectionMode(QListWidget.SelectionMode.SingleSelection)
@@ -143,6 +184,10 @@ class GroupReviewWindow(QWidget):
         self._gid: int | None = None
         self._icons: dict[str, QIcon] = {}
         self._big: dict[str, QPixmap] = {}
+        self._details: dict[str, QPixmap] = {}
+        self._detail_pending: set[str] = set()
+        self._detail_signals = _DetailSignals()
+        self._detail_signals.loaded.connect(self._on_detail_loaded)
         self._build()
         groups = session.groups()
         if groups:
@@ -174,10 +219,12 @@ class GroupReviewWindow(QWidget):
         body.addLayout(left)
 
         right = QVBoxLayout()
+        upper = QWidget()
+        upper_layout = QVBoxLayout(upper)
+        upper_layout.setContentsMargins(0, 0, 0, 0)
         top = QHBoxLayout()
-        self._preview = QLabel("미리보기")
-        self._preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._preview.setMinimumSize(360, 240)
+        self._preview = ZoomPanView()
+        self._preview.detail_requested.connect(self._request_detail)
         top.addWidget(self._preview, 1)
 
         score_box = QVBoxLayout()
@@ -200,19 +247,27 @@ class GroupReviewWindow(QWidget):
         score_w.setLayout(score_box)
         score_w.setFixedWidth(230)
         top.addWidget(score_w)
-        right.addLayout(top, 1)
+        upper_layout.addLayout(top, 1)
 
         self._reason_label = QLabel()
         self._reason_label.setWordWrap(True)
-        right.addWidget(self._reason_label)
+        upper_layout.addWidget(self._reason_label)
         self._group_info = QLabel()
-        right.addWidget(self._group_info)
+        upper_layout.addWidget(self._group_info)
 
         self._strip = _Strip()
         self._strip.currentItemChanged.connect(self._on_strip_current)
         self._strip.adoption_toggle_requested.connect(self._on_toggle)
         self._strip.context_requested.connect(self._on_context)
-        right.addWidget(self._strip)
+        self._splitter = QSplitter(Qt.Orientation.Vertical)
+        self._splitter.setChildrenCollapsible(False)
+        self._splitter.addWidget(upper)
+        self._splitter.addWidget(self._strip)
+        self._splitter.setStretchFactor(0, 1)
+        self._splitter.setStretchFactor(1, 0)
+        # one full row plus a peek of the next, so it is obvious the list scrolls
+        self._splitter.setSizes([420, int(STRIP_ROW_HEIGHT * 1.4)])
+        right.addWidget(self._splitter, 1)
 
         self._recent = QLabel("최근 작업: 없음")
         right.addWidget(self._recent)
@@ -305,6 +360,8 @@ class GroupReviewWindow(QWidget):
             if strip.currentItem() is None and strip.count():
                 strip.setCurrentRow(0)
         strip.blockSignals(False)
+        if strip.currentItem() is not None:
+            strip.scrollToItem(strip.currentItem())
         strip.viewport().update()
         self._show_current()
 
@@ -321,23 +378,26 @@ class GroupReviewWindow(QWidget):
     def _show_current(self) -> None:
         photo = self._strip.current_photo()
         if photo is None:
-            self._preview.setText("사진 없음")
+            self._preview.clear()
+            self._preview.set_image("", None, "사진 없음")
             self._reason_label.setText("")
             return
         key = str(photo.source_path)
         if key not in self._big:
             try:
-                self._big[key] = _pil_to_pixmap(load_analysis_image(photo.source_path, 1000))
+                self._big[key] = _pil_to_pixmap(
+                    load_analysis_image(photo.source_path, PREVIEW_LONG_SIDE)
+                )
             except Exception:
                 self._big[key] = QPixmap()
         pm = self._big[key]
         if pm.isNull():
-            self._preview.setText(f"{photo.source_path.name}\n(불러올 수 없음)")
+            self._preview.set_image(key, None, f"{photo.source_path.name}\n(불러올 수 없음)")
         else:
-            self._preview.setPixmap(
-                pm.scaled(self._preview.size(), Qt.AspectRatioMode.KeepAspectRatio,
-                          Qt.TransformationMode.SmoothTransformation)
-            )
+            # same photo -> zoom/pan are kept; another photo -> back to "fit"
+            self._preview.set_image(key, pm)
+            if key in self._details:
+                self._preview.set_detail(key, self._details[key])
         state = "채택" if photo.is_adopted else "제외"
         star = " · 추천" if photo.is_recommended else ""
         self._score_title.setText(f"품질 점수 · {photo.source_path.name}")
@@ -486,7 +546,18 @@ class GroupReviewWindow(QWidget):
             msg += f"\n\n실패 {len(errors)}건:\n" + "\n".join(errors[:5])
         QMessageBox.information(self, "내보내기 완료", msg)
 
-    def resizeEvent(self, event) -> None:  # noqa: N802
-        super().resizeEvent(event)
-        if hasattr(self, "_strip"):
-            self._show_current()
+    def _request_detail(self, key: str) -> None:
+        if key in self._details:
+            self._preview.set_detail(key, self._details[key])
+            return
+        if key in self._detail_pending:
+            return
+        self._detail_pending.add(key)
+        QThreadPool.globalInstance().start(_DetailLoader(Path(key), self._detail_signals))
+
+    def _on_detail_loaded(self, key: str, image: QImage) -> None:
+        self._detail_pending.discard(key)
+        self._details[key] = QPixmap.fromImage(image)
+        while len(self._details) > DETAIL_CACHE:
+            self._details.pop(next(iter(self._details)))
+        self._preview.set_detail(key, self._details.get(key, QPixmap()))

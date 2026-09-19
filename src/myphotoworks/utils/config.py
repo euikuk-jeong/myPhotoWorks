@@ -11,6 +11,8 @@ from myphotoworks.models.settings import (
 
 _CONFIG_PATH = Path.home() / ".myphotoworks" / "config.json"
 _SETTINGS_KEY = "app_settings"
+# v2: EXIF hint option became default-on; older configs stored the old default (False).
+_GROUPING_UI_VERSION = 2
 
 
 def load_config() -> dict:
@@ -50,6 +52,7 @@ def save_settings(cfg: dict, settings: AppSettings) -> None:
         "weight_color": settings.weight_color,
         "show_reason": settings.show_reason,
         "show_score": settings.show_score,
+        "grouping_ui_version": _GROUPING_UI_VERSION,
     }
 
 
@@ -92,7 +95,10 @@ def load_settings(cfg: dict) -> AppSettings:
             similarity_slider=int(data.get("similarity_slider", 50)),
             time_gap=float(data.get("time_gap", 2.0)),
             global_clustering=bool(data.get("global_clustering", False)),
-            use_exif_hints=bool(data.get("use_exif_hints", False)),
+            use_exif_hints=(
+                True if int(data.get("grouping_ui_version", 1)) < _GROUPING_UI_VERSION
+                else bool(data.get("use_exif_hints", True))
+            ),
             weight_sharpness=float(data.get("weight_sharpness", 0.5)),
             weight_exposure=float(data.get("weight_exposure", 0.3)),
             weight_color=float(data.get("weight_color", 0.2)),

@@ -37,7 +37,7 @@ class GroupingParams:
     threshold: float = DEFAULT_THRESHOLD  # similarity >= threshold joins the same group
     time_gap: float = 2.0                 # seconds
     global_clustering: bool = False       # order-independent comparison against all groups
-    use_exif_hints: bool = False          # focal length / lens / aperture consistency
+    use_exif_hints: bool = True           # focal length / lens / aperture consistency
 
 
 @dataclass(frozen=True)
@@ -155,10 +155,8 @@ def group_photos(metas: list[PhotoMeta], params: GroupingParams) -> GroupingResu
     use_hints = False
     if params.use_exif_hints:
         use_hints = hints_consistent(metas)
-        message += (
-            " EXIF(초점거리·렌즈·조리개)를 보조로 사용했습니다."
-            if use_hints else " EXIF 값이 일관되지 않아 사용하지 않았습니다."
-        )
+        if use_hints:  # silent when the data is missing: the option only ever helps
+            message += " EXIF(초점거리·렌즈·조리개)를 참고했습니다."
 
     # time-first decides by time gaps only; a global search would not make sense
     use_global = params.global_clustering and params.mode != GroupingMode.TIME_FIRST

@@ -29,7 +29,7 @@ class TestSaveSettings:
             "grouping_mode", "similarity_slider", "time_gap",
             "global_clustering", "use_exif_hints",
             "weight_sharpness", "weight_exposure", "weight_color",
-            "show_reason", "show_score",
+            "show_reason", "show_score", "grouping_ui_version",
         }
         assert expected_keys == set(data.keys())
 
@@ -179,3 +179,24 @@ class TestGroupingSettingsRoundTrip:
         assert loaded.brightness == 5
         assert loaded.grouping_mode == GroupingMode.AUTO
         assert loaded.weights() == (0.5, 0.3, 0.2)
+
+
+class TestExifHintDefault:
+    def test_default_on(self):
+        from myphotoworks.utils.config import load_settings
+
+        assert AppSettings().use_exif_hints is True
+        assert load_settings({"app_settings": {"brightness": 1}}).use_exif_hints is True
+
+    def test_old_config_that_stored_false_is_migrated_to_new_default(self):
+        from myphotoworks.utils.config import load_settings
+
+        cfg = {"app_settings": {"use_exif_hints": False, "global_clustering": False}}
+        assert load_settings(cfg).use_exif_hints is True
+
+    def test_current_version_respects_explicit_off(self):
+        from myphotoworks.utils.config import load_settings
+
+        cfg = {}
+        save_settings(cfg, AppSettings(use_exif_hints=False))
+        assert load_settings(cfg).use_exif_hints is False

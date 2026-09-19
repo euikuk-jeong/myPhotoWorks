@@ -231,6 +231,11 @@ class GroupSession:
         self._push()
         for p in list(self._members[absorb_gid]):
             self._move(p, absorb_gid, keep_gid)
+        # The merged group starts over: only its new recommendation is adopted, and it follows
+        # the recommendation again (e.g. on weight changes) until the user edits it.
+        for p in self._members[keep_gid]:
+            p.is_adopted = p.is_recommended if p.scores is not None else True
+        self._dirty.discard(keep_gid)
 
     def _move(self, photo: PhotoItem, src: int, dst: int) -> None:
         self._members[src].remove(photo)

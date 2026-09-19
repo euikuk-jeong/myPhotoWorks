@@ -48,6 +48,8 @@ a = Analysis(
         "myphotoworks.workers.group_worker",
         "myphotoworks.ui.group_tab",
         "myphotoworks.ui.group_review_window",
+        "myphotoworks.ui.guide",
+        "myphotoworks.ui.zoom_view",
         "piexif",
         "numpy",
     ],
