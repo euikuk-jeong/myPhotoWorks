@@ -101,9 +101,13 @@ class _CardDelegate(QStyledItemDelegate):
             painter.drawLine(box.left() + 7, box.bottom() - 4, box.right() - 3, box.top() + 4)
 
         if photo.is_recommended:
-            painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(_STAR)
-            painter.drawText(r.left() + 6, r.top() + 18, "★")
+            base_font = painter.font()
+            star_font = painter.font()
+            star_font.setPointSize(13)
+            painter.setFont(star_font)
+            painter.setPen(_STAR)
+            painter.drawText(r.left() + 6, r.top() + 20, "★")
+            painter.setFont(base_font)
 
         if self._panel.show_score and photo.scores is not None:
             from myphotoworks.core.scoring import composite

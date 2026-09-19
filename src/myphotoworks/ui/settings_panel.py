@@ -87,6 +87,9 @@ class SettingsPanel(QTabWidget):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        scroll.setStyleSheet("QScrollArea { background: transparent; border: none; }")
+        scroll.viewport().setStyleSheet("background: transparent;")
+        self.group_tab.setStyleSheet("GroupTab { background: transparent; }")
         scroll.setWidget(self.group_tab)
         self.addTab(scroll, "그룹")
 
