@@ -188,3 +188,59 @@ def test_remove_photos_deletes_empty_groups_and_rescores_untouched_groups():
     s.remove_photos([ps[5]])                  # last photo of the single group
     assert s.group_count() == 2
     assert len(s.photos_flat()) == 4
+
+
+def test_merge_leaves_only_the_new_recommendation_adopted():
+    s, ps = make()
+    g0, g1 = ps[0].group_id, ps[3].group_id
+    s.set_adopted(ps[1], True)                       # user adopted extra photos in both groups
+    s.set_adopted(ps[3], True)
+    assert adopted(ps) == ["a", "b", "d", "e", "f"]
+    s.merge(g0, g1)                                  # a(90) is the best of a,b,c,d,e
+    merged = s.group(g0).photos
+    assert [p.source_path.name for p in merged if p.is_adopted] == ["a"]
+    assert [p.source_path.name for p in merged if p.is_recommended] == ["a"]
+    assert adopted(ps) == ["a", "f"]                 # other groups untouched
+
+
+def test_merge_recommendation_can_come_from_the_absorbed_group():
+    a = photo("a", 40)
+    b = photo("b", 95)                               # better photo sits in the group below
+    s = GroupSession([a, b], [[0], [1]], W)
+    s.merge(a.group_id, b.group_id)
+    assert not a.is_adopted and b.is_adopted and b.is_recommended
+
+
+def test_merge_undo_restores_previous_adoption_and_edit_state():
+    s, ps = make()
+    g0, g1 = ps[0].group_id, ps[3].group_id
+    s.set_adopted(ps[1], True)
+    s.set_adopted(ps[3], True)
+    before = adopted(ps)
+    s.merge(g0, g1)
+    assert s.undo()
+    assert adopted(ps) == before
+    assert s.tag(g0) == TAG_EDITED and s.group_count() == 3
+
+
+def test_merged_group_follows_weight_changes_until_edited_again():
+    a = photo("a", 90, 20, 20)
+    b = photo("b", 40, 95, 95)
+    c = photo("c", 90, 20, 20)
+    s = GroupSession([a, b, c], [[0], [1], [2]], (1, 0, 0))
+    s.merge(a.group_id, b.group_id)                  # sharpness-only weights: a wins
+    assert a.is_adopted and not b.is_adopted
+    s.rescore((0, 0.5, 0.5))                         # not user-edited -> follows the new pick
+    assert b.is_adopted and not a.is_adopted
+    s.set_adopted(a, True)                           # user edit -> choice is kept from now on
+    s.rescore((1, 0, 0))
+    assert a.is_adopted and b.is_adopted
+
+
+def test_merge_keeps_unanalysed_photos_adopted():
+    a = photo("a", 90)
+    new = PhotoItem(Path("new"))                     # added after grouping: no scores
+    s = GroupSession([a], [[0]], W)
+    s.add_photos([new])
+    s.merge(a.group_id, new.group_id)
+    assert a.is_adopted and new.is_adopted           # never silently dropped

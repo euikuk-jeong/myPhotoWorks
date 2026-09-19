@@ -474,3 +474,28 @@ def test_review_toggle_in_scrolled_strip_keeps_scroll_position(qtbot, tmp_path):
     win._strip.adoption_toggle_requested.emit(last, not last.is_adopted)
     assert strip.current_photo() is last
     assert strip.verticalScrollBar().value() == pos
+
+
+def test_review_merge_up_and_down_leave_one_adopted_recommendation(window, qtbot):
+    run_grouping(window, qtbot)
+    window._on_review()
+    win = window._review_win
+    qtbot.addWidget(win)
+    session = window._session
+    # give the first two groups extra adopted photos so a plain merge would keep several
+    for g in session.groups()[:2]:
+        session.adopt_all(g.id)
+    win._reload()
+    win._group_list.setCurrentRow(1)
+    qtbot.waitUntil(lambda: win._gid == session.groups()[1].id, timeout=3000)
+    win._merge_up.click()                            # group 2 merges into group 1
+    merged = session.groups()[0]
+    assert len(merged.photos) == 6
+    assert sum(p.is_adopted for p in merged.photos) == 1
+    assert next(p for p in merged.photos if p.is_adopted).is_recommended
+    # merge down as well (the group that is now below)
+    win._gid = merged.id
+    win._merge_down.click()
+    merged = session.groups()[0]
+    assert sum(p.is_adopted for p in merged.photos) == 1
+    assert window._process_btn.text().startswith("일괄 적용")
