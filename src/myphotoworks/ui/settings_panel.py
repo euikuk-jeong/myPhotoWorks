@@ -1,4 +1,4 @@
-"""SettingsPanel — 보정 / 리사이즈 / 출력 3탭."""
+"""SettingsPanel — 보정 / 리사이즈 / 출력 / 그룹 4탭."""
 from __future__ import annotations
 
 import copy
@@ -15,6 +15,7 @@ from PyQt6.QtWidgets import (
     QLineEdit,
     QPushButton,
     QRadioButton,
+    QScrollArea,
     QSlider,
     QSpinBox,
     QTabWidget,
@@ -44,6 +45,11 @@ class SettingsPanel(QTabWidget):
     """
 
     settings_changed = pyqtSignal(object)
+    weights_changed = pyqtSignal()
+    display_changed = pyqtSignal()
+    group_run_requested = pyqtSignal()
+    group_cancel_requested = pyqtSignal()
+    group_review_requested = pyqtSignal()
 
     def __init__(self, settings: AppSettings, parent=None) -> None:
         super().__init__(parent)
@@ -51,6 +57,7 @@ class SettingsPanel(QTabWidget):
         self.addTab(self._build_effects_tab(), "보정")
         self.addTab(self._build_resize_tab(), "리사이즈")
         self.addTab(self._build_output_tab(), "출력")
+        self._build_group_tab()
 
     def settings(self) -> AppSettings:
         return self._settings
@@ -61,6 +68,27 @@ class SettingsPanel(QTabWidget):
         self._refresh_effects()
         self._refresh_resize()
         self._refresh_output()
+        self.group_tab.set_settings(self._settings)
+
+    # ------------------------------------------------------------------
+    # 그룹 탭
+    # ------------------------------------------------------------------
+
+    def _build_group_tab(self) -> None:
+        from myphotoworks.ui.group_tab import GroupTab
+
+        self.group_tab = GroupTab(self._settings)
+        self.group_tab.changed.connect(self._emit)
+        self.group_tab.weights_changed.connect(self.weights_changed)
+        self.group_tab.display_changed.connect(self.display_changed)
+        self.group_tab.run_requested.connect(self.group_run_requested)
+        self.group_tab.cancel_requested.connect(self.group_cancel_requested)
+        self.group_tab.review_requested.connect(self.group_review_requested)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        scroll.setWidget(self.group_tab)
+        self.addTab(scroll, "그룹")
 
     # ------------------------------------------------------------------
     # 보정 탭

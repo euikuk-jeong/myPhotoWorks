@@ -162,3 +162,15 @@ def read_exif(path: Path) -> dict[str, str]:
             pass
 
     return result
+
+
+def read_taken_at(path: Path) -> datetime | None:
+    """Return EXIF DateTimeOriginal (second resolution) or None. Cheap: no pixel decode."""
+    try:
+        exif_data = piexif.load(str(path))
+        raw = exif_data.get("Exif", {}).get(piexif.ExifIFD.DateTimeOriginal)
+        if not raw:
+            return None
+        return datetime.strptime(_decode(raw), "%Y:%m:%d %H:%M:%S")
+    except Exception:
+        return None
