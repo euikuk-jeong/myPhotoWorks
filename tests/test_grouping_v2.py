@@ -84,18 +84,20 @@ def test_exif_mismatch_splits_borderline_pair_only_when_enabled():
     from myphotoworks.core.similarity import similarity
     s = similarity(base.signature, near.signature)
     thr = s - 0.02
-    off = group_photos(metas, GroupingParams(**SIM_ONLY, threshold=thr))
+    off = group_photos(metas, GroupingParams(**SIM_ONLY, threshold=thr, use_exif_hints=False))
     on = group_photos(metas, GroupingParams(**SIM_ONLY, threshold=thr, use_exif_hints=True))
     assert off.groups[0][:2] == [0, 1]           # joined without hints
     assert on.hints_used and on.groups[0] == [0]  # split with hints
     assert "EXIF" in on.message
 
 
-def test_hints_ignored_and_reported_when_data_is_sparse():
+def test_hints_default_on_and_silently_ignored_when_data_is_sparse():
+    assert GroupingParams().use_exif_hints is True
     metas = [meta("a1.jpg", 1), meta("a2.jpg", 1, blur=1.0), meta("b1.jpg", 2)]
-    r = group_photos(metas, GroupingParams(**SIM_ONLY, use_exif_hints=True))
+    r = group_photos(metas, GroupingParams(**SIM_ONLY))
     assert not r.hints_used
-    assert "일관되지 않아" in r.message
+    assert "EXIF" not in r.message               # no scary message when there is no data
+    assert len(r.groups) == 2                    # and grouping is unaffected
 
 
 def test_read_hints_from_file_and_missing(tmp_path):

@@ -284,3 +284,62 @@ def test_space_key_toggles_adoption(window, qtbot):
     before = photo.is_adopted
     qtbot.keyClick(panel, Qt.Key.Key_Space)
     assert photo.is_adopted != before
+
+
+def test_group_tab_has_three_titled_sections(qtbot):
+    from PyQt6.QtWidgets import QGroupBox
+
+    from myphotoworks.ui.group_tab import GroupTab
+
+    tab = GroupTab(AppSettings())
+    qtbot.addWidget(tab)
+    titles = [b.title() for b in tab.findChildren(QGroupBox)]
+    assert titles == ["① 그룹핑 설정", "② 그룹핑 실행 · 결과", "③ 추천 설정"]
+    # run button and result live in section 2, weights in section 3
+    assert tab._run_box.isAncestorOf(tab._run_btn) and tab._run_box.isAncestorOf(tab._review_btn)
+    assert tab._recommend_box.isAncestorOf(tab._reset_btn)
+    assert tab._settings_box.isAncestorOf(tab._exif_cb)
+
+
+def test_exif_option_default_checked_and_global_unchecked(qtbot):
+    from myphotoworks.ui.group_tab import GroupTab
+
+    tab = GroupTab(AppSettings())
+    qtbot.addWidget(tab)
+    assert tab._exif_cb.isChecked()
+    assert not tab._global_cb.isChecked()
+
+
+def test_similarity_levels_are_plain_language_and_cover_full_range():
+    from myphotoworks.ui.group_tab import similarity_level
+
+    names = {similarity_level(v)[0] for v in range(0, 101)}
+    assert len(names) == 5
+    assert "권장" in similarity_level(50)[0]
+    assert all(similarity_level(v)[1] for v in range(0, 101))
+    low, high = similarity_level(0)[1], similarity_level(100)[1]
+    assert "그룹이 많아" in low and "섞일 수" in high
+
+
+def test_similarity_text_updates_with_slider(qtbot):
+    from myphotoworks.ui.group_tab import GroupTab
+
+    tab = GroupTab(AppSettings())
+    qtbot.addWidget(tab)
+    tab._sim_slider.setValue(95)
+    assert "아주 너그러움" in tab._sim_value.text() and "섞일 수" in tab._sim_text.text()
+
+
+def test_no_widget_level_stylesheet_leaks_into_children(window):
+    """A viewport/tab stylesheet would restyle combo popups and tooltips (bright-on-bright)."""
+    scroll = window._settings_panel.widget(3)
+    assert scroll.styleSheet() == ""
+    assert scroll.viewport().styleSheet() == ""
+    assert window._settings_panel.group_tab.styleSheet() == ""
+
+
+def test_theme_defines_dark_tooltip_and_group_scroll_rules():
+    from myphotoworks.ui.styles import load_glass_theme
+
+    qss = load_glass_theme()
+    assert "QToolTip" in qss and "QScrollArea#groupScroll" in qss

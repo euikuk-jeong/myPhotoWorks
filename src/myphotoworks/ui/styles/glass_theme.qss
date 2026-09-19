@@ -206,6 +206,7 @@ QSlider::handle:horizontal:disabled {
 /* ------------------------------------------------------------
    QSpinBox / QLineEdit / QComboBox — 입력 필드
    ------------------------------------------------------------ */
+QDoubleSpinBox,
 QSpinBox,
 QLineEdit {
     background: rgba(0, 0, 0, 0.30);
@@ -216,12 +217,14 @@ QLineEdit {
     selection-background-color: rgba(88, 166, 255, 0.50);
 }
 
+QDoubleSpinBox:focus,
 QSpinBox:focus,
 QLineEdit:focus {
     border: 1px solid rgba(88, 166, 255, 0.60);
     background: rgba(0, 0, 0, 0.40);
 }
 
+QDoubleSpinBox:disabled,
 QSpinBox:disabled,
 QLineEdit:disabled {
     color: rgba(255, 255, 255, 0.30);
@@ -229,7 +232,9 @@ QLineEdit:disabled {
     background: rgba(0, 0, 0, 0.15);
 }
 
+QDoubleSpinBox::up-button,
 QSpinBox::up-button,
+QDoubleSpinBox::down-button,
 QSpinBox::down-button {
     background: rgba(255, 255, 255, 0.10);
     border: none;
@@ -237,7 +242,9 @@ QSpinBox::down-button {
     width: 16px;
 }
 
+QDoubleSpinBox::up-button:hover,
 QSpinBox::up-button:hover,
+QDoubleSpinBox::down-button:hover,
 QSpinBox::down-button:hover {
     background: rgba(255, 255, 255, 0.22);
 }
@@ -542,4 +549,43 @@ QLabel#hint-label {
 /* About 다이얼로그 링크 */
 QLabel a {
     color: rgba(88, 166, 255, 0.90);
+}
+
+
+/* ------------------------------------------------------------
+   그룹 탭 스크롤 영역 (뷰포트 배경 투명 — 자식 위젯에는 전파되지 않도록 선택자 한정)
+   ------------------------------------------------------------ */
+QScrollArea#groupScroll {
+    background: transparent;
+    border: none;
+}
+
+QScrollArea#groupScroll > QWidget > QWidget {
+    background: transparent;
+}
+
+/* ------------------------------------------------------------
+   QToolTip — 어두운 배경 + 밝은 글자
+   ------------------------------------------------------------ */
+QToolTip {
+    background-color: rgb(30, 36, 48);
+    color: rgb(235, 240, 246);
+    border: 1px solid rgba(88, 166, 255, 0.60);
+    border-radius: 4px;
+    padding: 4px 6px;
+}
+
+
+/* ------------------------------------------------------------
+   QToolButton — 접이식 헤더 등 (배경 없이 텍스트만)
+   ------------------------------------------------------------ */
+QToolButton {
+    background: transparent;
+    color: rgba(255, 255, 255, 0.85);
+    border: none;
+    padding: 2px 2px;
+}
+
+QToolButton:hover {
+    color: white;
 }
