@@ -404,3 +404,73 @@ def test_review_preview_unreadable_photo_shows_message(window, qtbot, tmp_path):
     win._preview.clear()
     win._show_current()
     assert win._preview._pixmap is None and "불러올 수 없음" in win._preview._message
+
+
+def _big_group_review(qtbot, tmp_path, n=24):
+    from myphotoworks.core.scoring import QualityScores
+    from myphotoworks.models.group_session import GroupSession
+    from myphotoworks.models.photo_item import PhotoItem
+    from myphotoworks.ui.group_review_window import GroupReviewWindow
+
+    photos = []
+    for i in range(n):
+        p = tmp_path / f"big_{i:02d}.jpg"
+        scene(i % 5).save(p, "JPEG")
+        item = PhotoItem(p)
+        item.scores = QualityScores(50 + i, 60, 60)
+        photos.append(item)
+    session = GroupSession(photos, [list(range(n))], (0.5, 0.3, 0.2))
+    win = GroupReviewWindow(session, AppSettings())
+    qtbot.addWidget(win)
+    win.resize(1100, 720)
+    win.show()
+    qtbot.wait(100)
+    return win, photos
+
+
+def test_review_cards_wrap_and_scroll_vertically(qtbot, tmp_path):
+    win, photos = _big_group_review(qtbot, tmp_path)
+    strip = win._strip
+    assert strip.count() == 24
+    assert strip.horizontalScrollBar().maximum() == 0              # no sideways scrolling
+    assert strip.verticalScrollBar().maximum() > 0                 # scrolls downwards instead
+    rows = {strip.visualItemRect(strip.item(i)).top() - strip.verticalScrollBar().value()
+            for i in range(strip.count())}
+    assert len(rows) > 1                                           # cards wrapped onto rows
+    assert strip.horizontalScrollBarPolicy() == Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+
+
+def test_review_strip_wheel_scrolls_down_and_current_card_stays_visible(qtbot, tmp_path):
+    win, photos = _big_group_review(qtbot, tmp_path)
+    strip = win._strip
+    bar = strip.verticalScrollBar()
+    assert bar.value() == 0
+    bar.setValue(bar.maximum())
+    assert bar.value() > 0
+    strip.setCurrentRow(0)
+    strip.scrollToItem(strip.item(0))
+    assert bar.value() == 0
+    strip.setCurrentRow(strip.count() - 1)
+    strip.scrollToItem(strip.item(strip.count() - 1))
+    assert bar.value() == bar.maximum()
+
+
+def test_review_few_photos_need_no_scrollbar_and_splitter_is_resizable(qtbot, tmp_path):
+    win, _ = _big_group_review(qtbot, tmp_path, n=3)
+    assert win._strip.verticalScrollBar().maximum() == 0
+    assert win._splitter.count() == 2 and not win._splitter.childrenCollapsible()
+    before = win._splitter.sizes()
+    win._splitter.setSizes([before[0] - 100, before[1] + 100])
+    assert win._splitter.sizes()[1] > before[1]
+
+
+def test_review_toggle_in_scrolled_strip_keeps_scroll_position(qtbot, tmp_path):
+    win, photos = _big_group_review(qtbot, tmp_path)
+    strip = win._strip
+    strip.setCurrentRow(strip.count() - 1)
+    strip.scrollToItem(strip.item(strip.count() - 1))
+    pos = strip.verticalScrollBar().value()
+    last = strip.current_photo()
+    win._strip.adoption_toggle_requested.emit(last, not last.is_adopted)
+    assert strip.current_photo() is last
+    assert strip.verticalScrollBar().value() == pos
