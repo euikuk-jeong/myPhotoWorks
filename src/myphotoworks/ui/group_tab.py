@@ -21,6 +21,7 @@ from PyQt6.QtWidgets import (
 from myphotoworks.core.grouping import GroupingMode
 from myphotoworks.core.scoring import DEFAULT_WEIGHTS, normalize_weights
 from myphotoworks.models.settings import AppSettings
+from myphotoworks.ui.guide import open_guide
 
 _MODES = [
     ("자동 (권장)", GroupingMode.AUTO),
@@ -28,7 +29,7 @@ _MODES = [
     ("유사도만", GroupingMode.SIMILARITY_ONLY),
 ]
 _MODE_HINT = {
-    GroupingMode.AUTO: "촬영 시각이 믿을 만하면 참고하고, 아니면 사진 모양이 비슷한 것끼리 묶습니다.",
+    GroupingMode.AUTO: "촬영 시각이 믿을 만하면 참고하고, 아니면 사진 모양으로 묶습니다.",
     GroupingMode.TIME_FIRST: "촬영 시각 간격이 기준입니다. 시각이 없는 사진만 모양으로 묶습니다.",
     GroupingMode.SIMILARITY_ONLY: "촬영 시각은 무시하고 사진 모양이 비슷한 것끼리만 묶습니다.",
 }
@@ -90,6 +91,12 @@ class GroupTab(QWidget):
         root = QVBoxLayout(self)
         root.setContentsMargins(8, 4, 8, 8)
         root.setSpacing(6)
+        self._guide_btn = QPushButton("알고리즘 설명서 보기 (그림으로 쉽게 이해하기)")
+        self._guide_btn.setToolTip(
+            "사진을 어떻게 묶고 추천하는지 그림과 예제로 설명한 문서를 브라우저에서 엽니다."
+        )
+        self._guide_btn.clicked.connect(lambda: open_guide(self))
+        root.addWidget(self._guide_btn)
         root.addWidget(self._build_settings_box())
         root.addWidget(self._build_run_box())
         root.addWidget(self._build_recommend_box())
