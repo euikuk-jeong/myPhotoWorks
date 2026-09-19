@@ -343,3 +343,64 @@ def test_theme_defines_dark_tooltip_and_group_scroll_rules():
 
     qss = load_glass_theme()
     assert "QToolTip" in qss and "QScrollArea#groupScroll" in qss
+
+
+def _wheel(view, x, y, delta=120):
+    from PyQt6.QtCore import QPoint, QPointF
+    from PyQt6.QtGui import QWheelEvent
+
+    ev = QWheelEvent(QPointF(x, y), QPointF(x, y), QPoint(0, 0), QPoint(0, delta),
+                     Qt.MouseButton.NoButton, Qt.KeyboardModifier.NoModifier,
+                     Qt.ScrollPhase.NoScrollPhase, False)
+    view.wheelEvent(ev)
+
+
+def test_review_preview_is_zoomable_and_keeps_view_when_adoption_changes(window, qtbot):
+    from myphotoworks.ui.zoom_view import ZoomPanView
+
+    run_grouping(window, qtbot)
+    window._on_review()
+    win = window._review_win
+    qtbot.addWidget(win)
+    view = win._preview
+    assert isinstance(view, ZoomPanView)
+    assert view.relative_zoom() == 1.0
+    for _ in range(4):
+        _wheel(view, view.width() / 2, view.height() / 2)
+    zoomed = view.zoom
+    assert view.relative_zoom() > 1.0
+    # toggling adoption of the shown photo refreshes the panel but must not reset the zoom
+    shown = win._strip.current_photo()
+    win._strip.adoption_toggle_requested.emit(shown, not shown.is_adopted)
+    assert view.zoom == zoomed
+    # moving to another photo starts fitted again
+    win._strip.setCurrentRow(1)
+    qtbot.waitUntil(lambda: view.key != str(shown.source_path), timeout=3000)
+    assert view.relative_zoom() == 1.0
+
+
+def test_review_preview_loads_detail_image_on_zoom_in(window, qtbot):
+    run_grouping(window, qtbot)
+    window._on_review()
+    win = window._review_win
+    qtbot.addWidget(win)
+    view = win._preview
+    for _ in range(3):
+        _wheel(view, view.width() / 2, view.height() / 2)
+    key = view.key
+    qtbot.waitUntil(lambda: key in win._details, timeout=10000)
+    assert view._has_detail
+    assert not win._details[key].isNull()
+
+
+def test_review_preview_unreadable_photo_shows_message(window, qtbot, tmp_path):
+    run_grouping(window, qtbot)
+    window._on_review()
+    win = window._review_win
+    qtbot.addWidget(win)
+    photo = win._strip.current_photo()
+    photo.source_path.write_bytes(b"broken")           # can no longer be decoded
+    win._big.pop(str(photo.source_path), None)
+    win._preview.clear()
+    win._show_current()
+    assert win._preview._pixmap is None and "불러올 수 없음" in win._preview._message
