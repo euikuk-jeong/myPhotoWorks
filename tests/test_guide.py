@@ -1,5 +1,6 @@
 import os
 import re
+from pathlib import Path
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -16,25 +17,44 @@ from myphotoworks.models.settings import AppSettings  # noqa: E402
 from myphotoworks.ui import group_tab as group_tab_module  # noqa: E402
 from myphotoworks.ui import guide  # noqa: E402
 
+ROOT = Path(__file__).resolve().parents[1]
+GUIDE_DIR = ROOT / "guide"
+
 
 @pytest.fixture(scope="module")
 def html():
-    return guide.guide_source_path().read_text(encoding="utf-8")
+    return (GUIDE_DIR / guide.GUIDE_FILE).read_text(encoding="utf-8")
 
 
-# ---- the bundled document ---------------------------------------------------
+# ---- the published document (guide/ folder) -----------------------------------
 
 
-def test_guide_is_bundled_and_self_contained(html):
-    assert guide.guide_source_path().is_file()
+def test_guide_lives_in_guide_folder_not_docs(html):
+    assert (GUIDE_DIR / guide.GUIDE_FILE).is_file()
+    assert not (ROOT / "docs").exists()
     assert html.startswith("<!doctype html>") and 'lang="ko"' in html
+
+
+def test_guide_is_self_contained_and_static(html):
     assert not re.search(r'(?:src|href)\s*=\s*"(?:https?:)?//', html)   # nothing loaded online
-    assert "<script" not in html                                        # static, no scripts
+    assert "<script" not in html
 
 
 def test_guide_markup_is_balanced(html):
     for tag in ("div", "svg", "table", "details", "ul", "section"):
         assert html.count(f"<{tag}") == html.count(f"</{tag}>"), tag
+
+
+def test_guide_index_redirects_to_the_guide():
+    index = (GUIDE_DIR / "index.html").read_text(encoding="utf-8")
+    assert f"url={guide.GUIDE_FILE}" in index and f'href="{guide.GUIDE_FILE}"' in index
+
+
+def test_pages_workflow_publishes_only_the_guide_folder():
+    wf = (ROOT / ".github" / "workflows" / "guide-pages.yml").read_text(encoding="utf-8")
+    assert "path: guide" in wf and "actions/deploy-pages" in wf
+    assert "pages: write" in wf and "id-token: write" in wf
+    assert 'branches: [main]' in wf and '"guide/**"' in wf
 
 
 def test_guide_covers_grouping_and_recommendation_topics(html):
@@ -49,7 +69,6 @@ def test_guide_numbers_match_the_real_algorithm(html):
     assert f"{threshold_from_slider(50):.2f}" in html                    # default threshold
     assert f"{TIME_RELAX:.2f}" in html and f"{EXIF_MISMATCH_PENALTY:.2f}" in html
     assert f"{threshold_from_slider(50) - REPRESENTATIVE_SLACK:.2f}" in html
-    # example 4 / 5 arithmetic is computed with the real scoring code
     default = (0.5, 0.3, 0.2)
     assert f"{composite(QualityScores(84, 88, 76), default):.1f}" in html
     p1, p2 = QualityScores(90, 45, 60), QualityScores(70, 92, 65)
@@ -61,50 +80,31 @@ def test_guide_states_the_whole_image_limitation(html):
     assert "전체”를 기준" in html or "전체”를 기준" in html
 
 
-# ---- preparing / opening ----------------------------------------------------
+# ---- opening the link ---------------------------------------------------------
 
 
-def test_prepare_guide_copies_and_refreshes(tmp_path):
-    src = tmp_path / "src.html"
-    src.write_text("v1", encoding="utf-8")
-    out = guide.prepare_guide(tmp_path / "dest", source=src)
-    assert out.name == guide.GUIDE_NAME and out.read_text(encoding="utf-8") == "v1"
-    src.write_text("v2", encoding="utf-8")                              # bundled guide updated
-    assert guide.prepare_guide(tmp_path / "dest", source=src).read_text(encoding="utf-8") == "v2"
+def test_guide_url_points_to_the_published_file():
+    assert guide.GUIDE_URL.startswith("https://")
+    assert guide.GUIDE_URL.endswith("/" + guide.GUIDE_FILE)
+    assert "github.io/myPhotoWorks/" in guide.GUIDE_URL
 
 
-def test_prepare_guide_missing_source_raises(tmp_path):
-    with pytest.raises(FileNotFoundError):
-        guide.prepare_guide(tmp_path / "d", source=tmp_path / "nope.html")
-
-
-def test_open_guide_opens_local_file_url(monkeypatch, tmp_path):
+def test_open_guide_opens_the_url_in_the_default_browser(monkeypatch):
     opened = []
-    monkeypatch.setattr(guide, "default_guide_dir", lambda: tmp_path / "g")
     monkeypatch.setattr(guide.QDesktopServices, "openUrl", lambda url: opened.append(url) or True)
     assert guide.open_guide() is True
-    assert opened[0].isLocalFile()
-    assert opened[0].toLocalFile().replace("\\", "/").endswith("g/algorithm_guide.html")
-    assert (tmp_path / "g" / guide.GUIDE_NAME).is_file()
+    assert opened[0].toString() == guide.GUIDE_URL
 
 
-def test_open_guide_reports_when_browser_cannot_open(monkeypatch, tmp_path):
+def test_open_guide_shows_the_address_when_browser_cannot_open(monkeypatch):
     shown = []
-    monkeypatch.setattr(guide, "default_guide_dir", lambda: tmp_path / "g")
     monkeypatch.setattr(guide.QDesktopServices, "openUrl", lambda url: False)
     monkeypatch.setattr(guide.QMessageBox, "information", lambda *a, **k: shown.append(a[2]))
     assert guide.open_guide() is False
-    assert "algorithm_guide.html" in shown[0]                            # tells where the file is
+    assert guide.GUIDE_URL in shown[0]                                   # user can copy it
 
 
-def test_open_guide_reports_missing_file(monkeypatch, tmp_path):
-    shown = []
-    monkeypatch.setattr(guide, "guide_source_path", lambda: tmp_path / "missing.html")
-    monkeypatch.setattr(guide.QMessageBox, "warning", lambda *a, **k: shown.append(a[2]))
-    assert guide.open_guide() is False and shown
-
-
-# ---- group tab button -------------------------------------------------------
+# ---- group tab button -----------------------------------------------------------
 
 
 def test_group_tab_button_opens_the_guide(qtbot, monkeypatch):

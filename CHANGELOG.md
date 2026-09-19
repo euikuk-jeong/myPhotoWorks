@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- 알고리즘 설명서를 앱에 포함하지 않고 온라인(GitHub Pages)으로 제공: 그룹 탭 "알고리즘 설명서 보기"가 기본 브라우저에서 https://euikuk-jeong.github.io/myPhotoWorks/algorithm_guide.html 을 엽니다. (v1.2.0에서 앱 포함·오프라인이라고 안내한 부분이 변경됨. 인터넷 연결 필요)
+- 설명서 원본은 저장소의 `guide/` 폴더로 이동하고, `guide/` 변경 시 GitHub Actions(`guide-pages.yml`)가 자동 게시
+
 ## [1.2.0] - 2026-09-20
 
 ### Added
