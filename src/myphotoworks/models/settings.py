@@ -2,6 +2,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 
+from myphotoworks.core.grouping import GroupingMode
+
 
 class ResizeAxis(Enum):
     LONG = "long"    # 긴 축 기준
@@ -41,3 +43,18 @@ class AppSettings:
     output_prefix: str = ""
     output_suffix: str = ""
     output_quality: int = 90   # 1~100
+
+    # Lumis Flow grouping
+    grouping_mode: GroupingMode = GroupingMode.AUTO
+    similarity_slider: int = 50          # 0 strict .. 100 loose
+    time_gap: float = 2.0                # seconds
+    global_clustering: bool = False      # compare against all groups, not just neighbours
+    use_exif_hints: bool = False         # focal length / lens / aperture consistency
+    weight_sharpness: float = 0.5
+    weight_exposure: float = 0.3
+    weight_color: float = 0.2
+    show_reason: bool = True
+    show_score: bool = True
+
+    def weights(self) -> tuple[float, float, float]:
+        return (self.weight_sharpness, self.weight_exposure, self.weight_color)

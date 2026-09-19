@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from myphotoworks.core.grouping import GroupingMode
 from myphotoworks.models.settings import (
     AppSettings, CorrectionMode, OutputPathMode, ResizeAxis,
 )
@@ -39,6 +40,16 @@ def save_settings(cfg: dict, settings: AppSettings) -> None:
         "output_prefix": settings.output_prefix,
         "output_suffix": settings.output_suffix,
         "output_quality": settings.output_quality,
+        "grouping_mode": settings.grouping_mode.value,
+        "similarity_slider": settings.similarity_slider,
+        "time_gap": settings.time_gap,
+        "global_clustering": settings.global_clustering,
+        "use_exif_hints": settings.use_exif_hints,
+        "weight_sharpness": settings.weight_sharpness,
+        "weight_exposure": settings.weight_exposure,
+        "weight_color": settings.weight_color,
+        "show_reason": settings.show_reason,
+        "show_score": settings.show_score,
     }
 
 
@@ -77,6 +88,16 @@ def load_settings(cfg: dict) -> AppSettings:
             output_prefix=str(data.get("output_prefix", "")),
             output_suffix=str(data.get("output_suffix", "")),
             output_quality=int(data.get("output_quality", 90)),
+            grouping_mode=GroupingMode(data.get("grouping_mode", GroupingMode.AUTO.value)),
+            similarity_slider=int(data.get("similarity_slider", 50)),
+            time_gap=float(data.get("time_gap", 2.0)),
+            global_clustering=bool(data.get("global_clustering", False)),
+            use_exif_hints=bool(data.get("use_exif_hints", False)),
+            weight_sharpness=float(data.get("weight_sharpness", 0.5)),
+            weight_exposure=float(data.get("weight_exposure", 0.3)),
+            weight_color=float(data.get("weight_color", 0.2)),
+            show_reason=bool(data.get("show_reason", True)),
+            show_score=bool(data.get("show_score", True)),
         )
     except Exception:
         return AppSettings()

@@ -162,3 +162,35 @@ def read_exif(path: Path) -> dict[str, str]:
             pass
 
     return result
+
+
+def read_taken_at(path: Path) -> datetime | None:
+    """Return EXIF DateTimeOriginal (second resolution) or None. Cheap: no pixel decode."""
+    try:
+        exif_data = piexif.load(str(path))
+        raw = exif_data.get("Exif", {}).get(piexif.ExifIFD.DateTimeOriginal)
+        if not raw:
+            return None
+        return datetime.strptime(_decode(raw), "%Y:%m:%d %H:%M:%S")
+    except Exception:
+        return None
+
+
+def read_hints(path: Path):
+    """Return ExifHints (focal length, lens model, f-number) — values may be None."""
+    from myphotoworks.core.grouping import ExifHints
+
+    try:
+        exif_data = piexif.load(str(path))
+    except Exception:
+        return ExifHints()
+    exif_ifd = exif_data.get("Exif", {})
+
+    focal = _rational(exif_ifd.get(piexif.ExifIFD.FocalLength))
+    aperture = _rational(exif_ifd.get(piexif.ExifIFD.FNumber))
+    lens = _decode(exif_ifd.get(piexif.ExifIFD.LensModel, b"")) or None
+    return ExifHints(
+        focal=focal if focal and focal > 0 else None,
+        lens=lens,
+        aperture=aperture if aperture and aperture > 0 else None,
+    )

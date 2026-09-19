@@ -26,6 +26,10 @@ class TestSaveSettings:
             "resize_enabled", "resize_axis", "resize_px",
             "output_path_mode", "output_custom_dir",
             "output_prefix", "output_suffix", "output_quality",
+            "grouping_mode", "similarity_slider", "time_gap",
+            "global_clustering", "use_exif_hints",
+            "weight_sharpness", "weight_exposure", "weight_color",
+            "show_reason", "show_score",
         }
         assert expected_keys == set(data.keys())
 
@@ -145,3 +149,33 @@ class TestLoadSettings:
         cfg = {"app_settings": {"auto_level": True, "auto_contrast": True}}
         restored = load_settings(cfg)
         assert restored.correction_mode == CorrectionMode.AUTO_LEVEL_CONTRAST
+
+
+class TestGroupingSettingsRoundTrip:
+    def test_round_trip(self):
+        from myphotoworks.core.grouping import GroupingMode
+        from myphotoworks.utils.config import load_settings
+
+        s = AppSettings(
+            grouping_mode=GroupingMode.TIME_FIRST, similarity_slider=70, time_gap=3.5,
+            weight_sharpness=0.2, weight_exposure=0.5, weight_color=0.3,
+            show_reason=False, show_score=False,
+        )
+        cfg = {}
+        save_settings(cfg, s)
+        loaded = load_settings(cfg)
+        assert loaded.grouping_mode == GroupingMode.TIME_FIRST
+        assert loaded.similarity_slider == 70
+        assert loaded.time_gap == 3.5
+        assert loaded.weights() == (0.2, 0.5, 0.3)
+        assert loaded.show_reason is False and loaded.show_score is False
+
+    def test_old_config_without_grouping_keys_uses_defaults(self):
+        from myphotoworks.core.grouping import GroupingMode
+        from myphotoworks.utils.config import load_settings
+
+        cfg = {"app_settings": {"correction_mode": "none", "brightness": 5}}
+        loaded = load_settings(cfg)
+        assert loaded.brightness == 5
+        assert loaded.grouping_mode == GroupingMode.AUTO
+        assert loaded.weights() == (0.5, 0.3, 0.2)
