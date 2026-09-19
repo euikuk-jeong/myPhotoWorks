@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-09-19
+
 ### Added
 - **Lumis Flow — 사진 그룹핑·추천**
   - 시각 유사도(dHash + 색 히스토그램)로 비슷한 사진을 그룹핑. 촬영 시각은 신뢰될 때만 보조 신호로 사용(연사 허용, 필름 스캔처럼 시각이 몰린 데이터는 자동 제외)
@@ -20,6 +22,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - 그룹핑 후 사진 추가·삭제 시 기존 그룹 결과 유지(추가한 사진은 그룹핑 전 단독 사진으로 표시)
 - `core/` 패키지: `analysis_image`, `similarity`, `grouping`, `scoring`, `pipeline` (GUI 의존성 없음)
 - `GroupSession`, `GroupWorker`, `RescoreWorker`
+
+### Known limitations
+- 그룹핑 기본값(유사도 임계값 등)과 촬영 시각 신뢰 판정은 합성 이미지 기준이며 실제 사진(필름 스캔·연사 등)으로 튜닝하지 않았습니다. 결과가 맞지 않으면 그룹 탭의 유사도 임계값 슬라이더와 그룹 리뷰 창의 그룹 수정으로 조정하세요.
+- 분석용 축소본(장변 512px)에서는 약한 블러가 "흐림" 배지로 표시되지 않을 수 있습니다.
 
 ### Changed
 - `ThumbnailPanel`: 표시 목록 필터, 그룹 헤더, 카드 오버레이(체크박스·추천 별·점수·흐림 배지), 썸네일 로딩을 시그널 기반으로 변경
