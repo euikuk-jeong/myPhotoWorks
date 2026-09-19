@@ -50,6 +50,7 @@ class SettingsPanel(QTabWidget):
     group_run_requested = pyqtSignal()
     group_cancel_requested = pyqtSignal()
     group_review_requested = pyqtSignal()
+    group_rescore_requested = pyqtSignal()
 
     def __init__(self, settings: AppSettings, parent=None) -> None:
         super().__init__(parent)
@@ -84,6 +85,7 @@ class SettingsPanel(QTabWidget):
         self.group_tab.run_requested.connect(self.group_run_requested)
         self.group_tab.cancel_requested.connect(self.group_cancel_requested)
         self.group_tab.review_requested.connect(self.group_review_requested)
+        self.group_tab.rescore_requested.connect(self.group_rescore_requested)
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QScrollArea.Shape.NoFrame)

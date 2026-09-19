@@ -30,6 +30,10 @@ PhotoWorks는 사진 일괄 처리 분야에서 많은 사용자에게 신뢰받
 - EXIF 정보 표시 (촬영일, ISO, 파일 크기 등)
 - 출력 포맷 선택 (JPEG), 품질 설정
 - 배치 처리 진행 상황 표시
+- **Lumis Flow (사진 그룹핑·추천)** — 비슷한 사진(연사·필름 스캔)을 자동으로 묶고, 선명도·노출·색감 점수로 추천 사진을 골라줍니다.
+  - 그룹 탭: 그룹핑 방식(자동 / 시각 우선 / 유사도만), 유사도 임계값, 순서 무관 전체 비교, EXIF 참고, 추천 가중치(고급)
+  - 메인 화면: `[그룹별 보기]`, `[채택만 보기]` — 표시 목록이 곧 미리보기·일괄 적용 대상입니다
+  - 그룹 리뷰 창: 여러 장 채택, 그룹 이동·병합·분리, 되돌리기(Ctrl+Z), 채택 사진 내보내기
 
 ## 기술 스택 및 의존성
 
@@ -93,10 +97,11 @@ myPhotoWorks/
 ├── src/
 │   └── myphotoworks/
 │       ├── main.py               # QApplication 진입점
-│       ├── ui/                   # GUI 모듈 (메인 창, 프리뷰 창, 썸네일 패널 등)
-│       ├── processing/           # 이미지 처리 (effects, resize, processor)
-│       ├── models/               # PhotoItem, AppSettings dataclass
-│       ├── workers/              # QThread 배치 처리 워커
+│       ├── ui/                   # GUI 모듈 (메인 창, 프리뷰 창, 썸네일 패널, 그룹 탭/리뷰 창 등)
+│       ├── core/                 # 그룹핑·유사도·스코어링 (GUI 의존성 없음)
+│       ├── processing/           # 이미지 처리 (effects, resize, processor, 그룹핑 실행, 내보내기)
+│       ├── models/               # PhotoItem, AppSettings, GroupSession
+│       ├── workers/              # QThread 워커 (배치 처리, 그룹핑)
 │       └── utils/                # EXIF 읽기, 설정 저장/로드
 └── tests/                        # pytest 단위 테스트
 ```

@@ -7,6 +7,7 @@ from collections.abc import Callable
 
 from PIL import Image
 
+from myphotoworks.core.analysis_image import load_analysis_image
 from myphotoworks.core.grouping import (
     GroupingParams,
     GroupingResult,
@@ -15,11 +16,12 @@ from myphotoworks.core.grouping import (
     threshold_from_slider,
 )
 from myphotoworks.core.pipeline import analyze_photo
+from myphotoworks.core.scoring import QualityScores, color_score, exposure_score
 from myphotoworks.models.group_session import GroupSession
 from myphotoworks.models.photo_item import PhotoItem
 from myphotoworks.models.settings import AppSettings
 from myphotoworks.processing import processor
-from myphotoworks.utils.exif_reader import read_taken_at
+from myphotoworks.utils.exif_reader import read_hints, read_taken_at
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +42,45 @@ def params_from_settings(settings: AppSettings) -> GroupingParams:
         mode=settings.grouping_mode,
         threshold=threshold_from_slider(settings.similarity_slider),
         time_gap=settings.time_gap,
+        global_clustering=settings.global_clustering,
+        use_exif_hints=settings.use_exif_hints,
     )
+
+
+def refresh_correction_scores(
+    photos: list[PhotoItem],
+    settings: AppSettings,
+    progress: ProgressCb | None = None,
+    is_cancelled: Callable[[], bool] | None = None,
+) -> int:
+    """Recompute only exposure / colour after the correction settings changed.
+
+    Groups, signatures and sharpness are kept, so user edits stay valid. Returns the
+    number of photos updated. Raises Cancelled when interrupted.
+    """
+    key = correction_key(settings)
+    scoring_settings = dataclasses.replace(settings, resize_enabled=False)
+    todo = [p for p in photos if p.analysis is not None and p.analysis_key != key]
+    for n, photo in enumerate(todo, start=1):
+        if is_cancelled and is_cancelled():
+            raise Cancelled
+        if progress:
+            progress("노출·색감 다시 계산 중", n, len(todo))
+        try:
+            raw = load_analysis_image(photo.source_path)
+            corrected = processor.process(
+                PhotoItem(photo.source_path), scoring_settings, source_image=raw
+            )
+        except Exception as e:
+            logger.warning("rescore failed for %s: %s", photo.source_path, e)
+            continue
+        old = photo.analysis.scores
+        photo.analysis.scores = QualityScores(
+            old.sharpness, exposure_score(corrected), color_score(corrected)
+        )
+        photo.scores = photo.analysis.scores
+        photo.analysis_key = key
+    return len(todo)
 
 
 def run_grouping(
@@ -72,7 +112,8 @@ def run_grouping(
             continue
         try:
             photo.analysis = analyze_photo(
-                photo.source_path, read_taken_at(photo.source_path), correct
+                photo.source_path, read_taken_at(photo.source_path),
+                read_hints(photo.source_path), correct,
             )
             photo.analysis_key = key
         except Exception as e:  # unreadable / corrupt file
@@ -84,7 +125,7 @@ def run_grouping(
 
     ok = [i for i, p in enumerate(photos) if p.analysis is not None]
     metas = [
-        PhotoMeta(photos[i].source_path.name, a.signature, a.taken)
+        PhotoMeta(photos[i].source_path.name, a.signature, a.taken, a.hints)
         for i, a in ((i, photos[i].analysis) for i in ok)
     ]
     if progress:

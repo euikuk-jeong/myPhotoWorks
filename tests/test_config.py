@@ -27,6 +27,7 @@ class TestSaveSettings:
             "output_path_mode", "output_custom_dir",
             "output_prefix", "output_suffix", "output_quality",
             "grouping_mode", "similarity_slider", "time_gap",
+            "global_clustering", "use_exif_hints",
             "weight_sharpness", "weight_exposure", "weight_color",
             "show_reason", "show_score",
         }

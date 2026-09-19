@@ -141,15 +141,16 @@ class ThumbnailPanel(QListWidget):
         Emitted when a thumbnail is double-clicked (open preview).
     adoption_toggle_requested(PhotoItem, bool)
         User clicked a card checkbox (or pressed Space) — value is the requested new state.
-    photos_changed()
-        Photos were added or removed.
+    photos_added(list) / photos_removed(list)
+        Photos were added to / removed from the list.
     """
 
     photo_selected = pyqtSignal(object)
     photo_double_clicked = pyqtSignal(object)
     show_info_requested = pyqtSignal()
     adoption_toggle_requested = pyqtSignal(object, bool)
-    photos_changed = pyqtSignal()
+    photos_added = pyqtSignal(list)
+    photos_removed = pyqtSignal(list)
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
@@ -194,17 +195,18 @@ class ThumbnailPanel(QListWidget):
     def add_photos(self, paths: list[Path]) -> None:
         """Add new photos (skip duplicates and unsupported formats)."""
         existing = {p.source_path for p in self._photos}
-        added = False
+        added: list[PhotoItem] = []
         for path in paths:
             if path.suffix.lower() not in SUPPORTED_EXTS:
                 continue
             if path in existing:
                 continue
-            self._photos.append(PhotoItem(source_path=path))
-            added = True
+            item = PhotoItem(source_path=path)
+            self._photos.append(item)
+            added.append(item)
         if added:
             self.rebuild()
-            self.photos_changed.emit()
+            self.photos_added.emit(added)
 
     def remove_selected(self) -> None:
         """Remove currently selected photos from the list."""
@@ -214,15 +216,16 @@ class ThumbnailPanel(QListWidget):
         }
         if not doomed:
             return
+        removed = [p for p in self._photos if id(p) in doomed]
         self._photos = [p for p in self._photos if id(p) not in doomed]
         self.rebuild()
-        self.photos_changed.emit()
+        self.photos_removed.emit(removed)
 
     def clear_all(self) -> None:
+        removed = list(self._photos)
         self._photos.clear()
-        self._session = None
         self.rebuild()
-        self.photos_changed.emit()
+        self.photos_removed.emit(removed)
 
     def current_photo(self) -> PhotoItem | None:
         row = self.currentRow()

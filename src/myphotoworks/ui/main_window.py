@@ -1,6 +1,7 @@
 """MainWindow — file list (left, large) + settings panel (right) + bottom action bar."""
 from __future__ import annotations
 
+import dataclasses
 from pathlib import Path
 
 from PyQt6.QtCore import Qt
@@ -23,6 +24,7 @@ from PyQt6.QtWidgets import (
 
 from myphotoworks.models.photo_item import PhotoItem
 from myphotoworks.models.settings import AppSettings
+from myphotoworks.processing.group_runner import correction_key
 from myphotoworks.ui.settings_panel import SettingsPanel
 from myphotoworks.ui.thumbnail_panel import ThumbnailPanel
 from myphotoworks.utils.config import load_config, load_settings, save_config, save_settings
@@ -66,6 +68,8 @@ class MainWindow(QMainWindow):
         self._group_worker = None
         self._session = None
         self._review_win = None
+        self._rescore_worker = None
+        self._analysis_key = None
 
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self._build_ui()
@@ -158,7 +162,8 @@ class MainWindow(QMainWindow):
         self._thumb_panel.photo_selected.connect(self._on_photo_selected)
         self._thumb_panel.photo_double_clicked.connect(self._on_photo_double_clicked)
         self._thumb_panel.show_info_requested.connect(self._on_about)
-        self._thumb_panel.photos_changed.connect(self._on_photos_changed)
+        self._thumb_panel.photos_added.connect(self._on_photos_added)
+        self._thumb_panel.photos_removed.connect(self._on_photos_removed)
         self._thumb_panel.adoption_toggle_requested.connect(self._on_adoption_toggle)
         self._thumb_panel.set_options(
             self._settings.show_reason, self._settings.show_score, self._settings.weights()
@@ -172,6 +177,7 @@ class MainWindow(QMainWindow):
         self._settings_panel.group_run_requested.connect(self._on_group_run)
         self._settings_panel.group_cancel_requested.connect(self._on_group_cancel)
         self._settings_panel.group_review_requested.connect(self._on_review)
+        self._settings_panel.group_rescore_requested.connect(self._on_rescore)
         splitter.addWidget(self._settings_panel)
 
 
@@ -252,6 +258,7 @@ class MainWindow(QMainWindow):
 
     def _on_settings_changed(self, settings: AppSettings) -> None:
         self._settings = settings
+        self._check_stale_scores()
         save_config(self._cfg)
 
     # ------------------------------------------------------------------
@@ -339,6 +346,8 @@ class MainWindow(QMainWindow):
         if self._session is None:
             return
         self._session = None
+        self._analysis_key = None
+        self._settings_panel.group_tab.set_stale(False)
         if self._review_win is not None:
             self._review_win.close()
             self._review_win = None
@@ -349,14 +358,27 @@ class MainWindow(QMainWindow):
         self._settings_panel.group_tab.clear_result()
         self._apply_view()
 
-    def _on_photos_changed(self) -> None:
-        had_session = self._session is not None
-        self._drop_session()
-        self._update_buttons()
-        if had_session:
+    def _on_photos_added(self, added: list[PhotoItem]) -> None:
+        if self._session is not None:
+            self._session.add_photos(added)
+            self._thumb_panel.rebuild()
+            self._update_buttons()
             self._status_label.setText(
-                "사진 목록이 바뀌어 그룹 결과를 초기화했습니다. 다시 그룹핑하세요."
+                f"추가한 {self._session.added_count()}장은 그룹핑 전입니다. "
+                "다시 그룹핑하면 그룹에 포함됩니다."
             )
+            return
+        self._update_buttons()
+
+    def _on_photos_removed(self, removed: list[PhotoItem]) -> None:
+        if self._session is not None:
+            self._session.remove_photos(removed)
+            if self._session.group_count() == 0:
+                self._drop_session()
+            else:
+                self._on_review_changed()
+                return
+        self._update_buttons()
 
     def _on_group_run(self) -> None:
         photos = self._thumb_panel.all_photos()
@@ -365,7 +387,7 @@ class MainWindow(QMainWindow):
         from myphotoworks.workers.group_worker import GroupWorker
 
         self._drop_session()
-        self._group_worker = GroupWorker(photos, self._settings)
+        self._group_worker = GroupWorker(photos, dataclasses.replace(self._settings))
         self._group_worker.progress.connect(self._settings_panel.group_tab.set_progress)
         self._group_worker.done.connect(self._on_group_done)
         self._group_worker.cancelled.connect(self._on_group_cancelled)
@@ -395,6 +417,8 @@ class MainWindow(QMainWindow):
 
     def _on_group_done(self, session, result) -> None:
         self._session = session
+        self._analysis_key = correction_key(self._settings)
+        self._settings_panel.group_tab.set_stale(False)
         self._thumb_panel.set_options(
             self._settings.show_reason, self._settings.show_score, self._settings.weights()
         )
@@ -419,6 +443,46 @@ class MainWindow(QMainWindow):
         self._set_grouping_busy(False)
         self._status_label.setText(f"그룹핑 오류: {msg}")
         QMessageBox.warning(self, "그룹핑 오류", msg)
+
+    def _check_stale_scores(self) -> None:
+        if self._session is None or self._analysis_key is None:
+            return
+        self._settings_panel.group_tab.set_stale(
+            correction_key(self._settings) != self._analysis_key
+        )
+
+    def _on_rescore(self) -> None:
+        if self._session is None or self._rescore_worker is not None:
+            return
+        from myphotoworks.workers.group_worker import RescoreWorker
+
+        photos = self._session.photos_flat()
+        self._rescore_worker = RescoreWorker(photos, dataclasses.replace(self._settings))
+        self._rescore_worker.progress.connect(self._on_rescore_progress)
+        self._rescore_worker.done.connect(self._on_rescore_done)
+        self._rescore_worker.error.connect(self._on_group_error)
+        self._rescore_worker.finished.connect(self._on_rescore_thread_finished)
+        self._analysis_key_pending = correction_key(self._settings)
+        self._settings_panel.group_tab.set_running(True)
+        self._rescore_worker.start()
+
+    def _on_rescore_progress(self, stage: str, cur: int, total: int) -> None:
+        self._settings_panel.group_tab.set_progress(stage, cur, total)
+
+    def _on_rescore_done(self, count: int) -> None:
+        self._settings_panel.group_tab.set_running(False)
+        if self._session is None:
+            return
+        self._analysis_key = self._analysis_key_pending
+        self._session.rescore(self._settings.weights())
+        self._check_stale_scores()
+        self._on_review_changed()
+        self._status_label.setText(f"노출·색감 점수를 다시 계산했습니다. ({count}장)")
+
+    def _on_rescore_thread_finished(self) -> None:
+        worker, self._rescore_worker = self._rescore_worker, None
+        if worker is not None:
+            worker.deleteLater()
 
     def _on_weights_changed(self) -> None:
         if self._session is None:

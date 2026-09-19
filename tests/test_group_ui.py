@@ -129,14 +129,71 @@ def test_weight_change_rescores_without_regrouping(window, qtbot):
     assert session.adopted_count() == 4
 
 
-def test_adding_photos_invalidates_session(window, qtbot, tmp_path):
+def test_adding_photos_keeps_session_and_adds_ungrouped_singles(window, qtbot, tmp_path):
     run_grouping(window, qtbot)
+    session = window._session
+    before_groups = session.group_count()
     extra = tmp_path / "new.jpg"
     scene(9).save(extra, "JPEG")
     window._thumb_panel.add_photos([extra])
+    assert window._session is session
+    assert session.group_count() == before_groups + 1
+    assert session.added_count() == 1
+    new_item = window._thumb_panel.all_photos()[-1]
+    assert new_item.is_adopted and new_item.scores is None
+    assert window._process_btn.text() == "일괄 적용 (7장)"
+    assert "그룹핑 전" in window._status_label.text()
+    run_grouping_again = window._settings_panel.group_tab._run_btn
+    run_grouping_again.click()
+    qtbot.waitUntil(lambda: window._session is not session and window._session is not None,
+                    timeout=15000)
+    assert window._session.added_count() == 0
+
+
+def test_removing_photos_keeps_groups_and_undo_is_cleared(window, qtbot):
+    run_grouping(window, qtbot)
+    session = window._session
+    panel = window._thumb_panel
+    victim = panel.all_photos()[0]
+    for i in range(panel.count()):
+        if panel.item(i).data(Qt.ItemDataRole.UserRole) is victim:
+            panel.setCurrentRow(i)
+            panel.item(i).setSelected(True)
+    session.set_adopted(victim, not victim.is_adopted)
+    assert session.can_undo
+    panel.remove_selected()
+    assert window._session is session
+    assert victim not in panel.all_photos()
+    assert not session.can_undo
+    assert len(session.photos_flat()) == 5
+
+
+def test_clear_all_drops_session(window, qtbot):
+    run_grouping(window, qtbot)
+    window._on_clear_all()
     assert window._session is None
     assert not window._review_btn.isEnabled()
-    assert window._process_btn.text() == "일괄 적용 (7장)"
+
+
+def test_correction_change_marks_scores_stale_and_rescore_keeps_groups(window, qtbot):
+    from myphotoworks.models.settings import CorrectionMode
+
+    run_grouping(window, qtbot)
+    session = window._session
+    tab = window._settings_panel.group_tab
+    assert not tab._stale_frame.isVisibleTo(tab)
+    groups_before = [[p.source_path.name for p in g.photos] for g in session.groups()]
+    victim = window._thumb_panel.all_photos()[1]
+    session.set_adopted(victim, True)       # a user edit that must survive
+    window._settings.correction_mode = CorrectionMode.AUTO_LEVEL
+    window._settings_panel.settings_changed.emit(window._settings)
+    assert tab._stale_frame.isVisibleTo(tab)
+    tab._stale_btn.click()
+    qtbot.waitUntil(lambda: window._rescore_worker is None, timeout=15000)
+    assert not tab._stale_frame.isVisibleTo(tab)
+    assert window._session is session
+    assert [[p.source_path.name for p in g.photos] for g in session.groups()] == groups_before
+    assert victim.is_adopted
 
 
 def test_cancel_returns_to_idle(window, qtbot):
@@ -175,6 +232,19 @@ def test_review_window_operations(window, qtbot):
     # selecting another group in the list updates the strip and marks it reviewed
     win._group_list.setCurrentRow(1)
     qtbot.waitUntil(lambda: session.reviewed_count() >= 2, timeout=3000)
+
+
+def test_review_window_drop_on_group_moves_current_photo(window, qtbot):
+    run_grouping(window, qtbot)
+    window._on_review()
+    win = window._review_win
+    qtbot.addWidget(win)
+    session = window._session
+    g1 = session.groups()[1]
+    win._strip.setCurrentRow(1)
+    photo = win._strip.current_photo()
+    win._group_list.photo_dropped.emit(g1.id)   # what _GroupList emits on a drop
+    assert photo.group_id == g1.id
 
 
 def test_review_window_move_and_detach(window, qtbot):

@@ -56,6 +56,7 @@ class GroupTab(QWidget):
     run_requested = pyqtSignal()
     cancel_requested = pyqtSignal()
     review_requested = pyqtSignal()
+    rescore_requested = pyqtSignal()
 
     def __init__(self, settings: AppSettings, parent=None) -> None:
         super().__init__(parent)
@@ -121,6 +122,18 @@ class GroupTab(QWidget):
         self._gap_spin.valueChanged.connect(self._on_gap)
         row.addWidget(self._gap_spin)
         box.addLayout(row)
+        self._global_cb = QCheckBox("순서 무관 전체 비교 (떨어진 같은 장면도 묶기)")
+        self._global_cb.setToolTip(
+            "스캔 순서가 뒤섞인 필름 등에 유용합니다. 비슷한 다른 장면이 묶일 수 있습니다."
+        )
+        self._global_cb.toggled.connect(self._on_global)
+        box.addWidget(self._global_cb)
+        self._exif_cb = QCheckBox("EXIF 초점거리·렌즈·조리개 참고")
+        self._exif_cb.setToolTip(
+            "대부분의 사진에 값이 있을 때만 적용됩니다. 수동 렌즈·스캔은 자동으로 제외됩니다."
+        )
+        self._exif_cb.toggled.connect(self._on_exif)
+        box.addWidget(self._exif_cb)
         root.addWidget(self._settings_box)
 
         self._run_btn = QPushButton("그룹핑 실행")
@@ -144,6 +157,18 @@ class GroupTab(QWidget):
         self._result_label = QLabel("결과 요약이 여기에 표시됩니다.")
         self._result_label.setWordWrap(True)
         root.addWidget(self._result_label)
+
+        self._stale_frame = QFrame()
+        sf = QVBoxLayout(self._stale_frame)
+        sf.setContentsMargins(0, 0, 0, 0)
+        stale_lbl = QLabel("보정 설정이 바뀌어 노출·색감 점수가 최신이 아닙니다.")
+        stale_lbl.setWordWrap(True)
+        self._stale_btn = QPushButton("점수 다시 계산")
+        self._stale_btn.clicked.connect(self.rescore_requested)
+        sf.addWidget(stale_lbl)
+        sf.addWidget(self._stale_btn)
+        self._stale_frame.setVisible(False)
+        root.addWidget(self._stale_frame)
 
         # --- advanced (collapsible) ---
         self._adv_btn = QToolButton()
@@ -210,6 +235,8 @@ class GroupTab(QWidget):
         self._gap_spin.setValue(s.time_gap)
         for slider, w in zip(self._w_sliders, s.weights(), strict=True):
             slider.setValue(round(w * 100))
+        self._global_cb.setChecked(s.global_clustering)
+        self._exif_cb.setChecked(s.use_exif_hints)
         self._reason_cb.setChecked(s.show_reason)
         self._score_cb.setChecked(s.show_score)
         self._block(False)
@@ -218,7 +245,7 @@ class GroupTab(QWidget):
 
     def _block(self, on: bool) -> None:
         for w in (self._mode_combo, self._sim_slider, self._gap_spin, self._reason_cb,
-                  self._score_cb, *self._w_sliders):
+                  self._score_cb, self._global_cb, self._exif_cb, *self._w_sliders):
             w.blockSignals(on)
 
     def _update_labels(self) -> None:
@@ -241,6 +268,17 @@ class GroupTab(QWidget):
         self._settings.similarity_slider = value
         self._update_labels()
         self.changed.emit()
+
+    def _on_global(self, checked: bool) -> None:
+        self._settings.global_clustering = checked
+        self.changed.emit()
+
+    def _on_exif(self, checked: bool) -> None:
+        self._settings.use_exif_hints = checked
+        self.changed.emit()
+
+    def set_stale(self, stale: bool) -> None:
+        self._stale_frame.setVisible(stale)
 
     def _on_gap(self, value: float) -> None:
         self._settings.time_gap = float(value)
@@ -318,6 +356,7 @@ class GroupTab(QWidget):
         )
         self._run_btn.setEnabled(idle and self._has_photos)
         self._review_btn.setEnabled(idle and self._done)
+        self._stale_btn.setEnabled(idle)
         self._review_hint.setVisible(not (idle and self._done))
         self._review_hint.setText(
             "그룹핑 진행 중에는 사용할 수 없습니다." if self._running

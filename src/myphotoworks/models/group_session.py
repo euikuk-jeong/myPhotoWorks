@@ -37,6 +37,7 @@ class GroupSession:
         self._dirty: set[int] = set()
         self._reviewed: set[int] = set()
         self._undo: list[tuple] = []
+        self._added: set[int] = set()  # photos added after grouping (not analysed)
         for idxs in groups:
             gid = self._new_id()
             self._order.append(gid)
@@ -124,6 +125,39 @@ class GroupSession:
         for gid in self._order:
             self._refresh_recommendations(gid)
         return True
+
+    def added_count(self) -> int:
+        """Photos added after the last grouping run (they sit alone until regrouped)."""
+        return sum(1 for p in self._photos if id(p) in self._added)
+
+    def add_photos(self, added: list[PhotoItem]) -> None:
+        """Append new photos as single, adopted groups; they are not scored or compared."""
+        for p in added:
+            gid = self._new_id()
+            self._order.append(gid)
+            self._members[gid] = [p]
+            p.group_id, p.scores = gid, None
+            p.is_recommended, p.is_adopted, p.reason = False, True, ""
+            self._photos.append(p)
+            self._added.add(id(p))
+        self._undo.clear()  # snapshots would not know these photos
+
+    def remove_photos(self, removed: list[PhotoItem]) -> None:
+        """Drop photos; groups that lose every member disappear, others keep their state."""
+        gone = {id(p) for p in removed}
+        self._photos = [p for p in self._photos if id(p) not in gone]
+        self._added -= gone
+        for gid in list(self._order):
+            kept = [p for p in self._members[gid] if id(p) not in gone]
+            if kept:
+                self._members[gid] = kept
+            else:
+                del self._members[gid]
+                self._order.remove(gid)
+                self._dirty.discard(gid)
+                self._reviewed.discard(gid)
+        self._undo.clear()
+        self.rescore(self._weights)
 
     def mark_reviewed(self, gid: int) -> None:
         self._reviewed.add(gid)

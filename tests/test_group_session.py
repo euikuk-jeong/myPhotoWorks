@@ -164,3 +164,27 @@ def test_split_from_moves_selected_and_following_photos():
     s.undo()
     assert [p.source_path.name for p in s.group(g0).photos] == ["a", "b", "c"]
     assert s.group_count() == 3
+
+
+def test_add_photos_become_adopted_singles_and_clear_undo():
+    s, ps = make()
+    s.set_adopted(ps[1], True)
+    assert s.can_undo
+    new = PhotoItem(Path("new"))
+    s.add_photos([new])
+    assert s.group_count() == 4 and s.added_count() == 1
+    assert new.is_adopted and not new.is_recommended and new.scores is None
+    assert s.group(new.group_id).is_single
+    assert not s.can_undo
+    s.rescore(W)
+    assert new.is_adopted            # unanalysed photos stay adopted
+
+
+def test_remove_photos_deletes_empty_groups_and_rescores_untouched_groups():
+    s, ps = make()
+    s.remove_photos([ps[0]])                  # removes the recommended photo of group 0
+    assert [p.source_path.name for p in s.group(ps[1].group_id).photos] == ["b", "c"]
+    assert ps[1].is_recommended and ps[1].is_adopted   # untouched group follows new pick
+    s.remove_photos([ps[5]])                  # last photo of the single group
+    assert s.group_count() == 2
+    assert len(s.photos_flat()) == 4
