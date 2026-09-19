@@ -17,6 +17,7 @@ def open_guide(parent: QWidget | None = None) -> bool:
         return True
     QMessageBox.information(
         parent, GUIDE_TITLE,
-        f"브라우저를 자동으로 열지 못했습니다.\n아래 주소를 브라우저에 붙여넣어 주세요.\n\n{GUIDE_URL}",
+        "브라우저를 자동으로 열지 못했습니다.\n"
+        f"아래 주소를 브라우저에 붙여넣어 주세요.\n\n{GUIDE_URL}",
     )
     return False
