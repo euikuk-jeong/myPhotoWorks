@@ -490,12 +490,13 @@ def test_review_merge_up_and_down_leave_one_adopted_recommendation(window, qtbot
     qtbot.waitUntil(lambda: win._gid == session.groups()[1].id, timeout=3000)
     win._merge_up.click()                            # group 2 merges into group 1
     merged = session.groups()[0]
-    assert len(merged.photos) == 6
+    assert len(merged.photos) == 4                   # groups are 2 + 2 + 1 + 1 photos
     assert sum(p.is_adopted for p in merged.photos) == 1
     assert next(p for p in merged.photos if p.is_adopted).is_recommended
     # merge down as well (the group that is now below)
     win._gid = merged.id
     win._merge_down.click()
     merged = session.groups()[0]
+    assert len(merged.photos) == 5
     assert sum(p.is_adopted for p in merged.photos) == 1
     assert window._process_btn.text().startswith("일괄 적용")
