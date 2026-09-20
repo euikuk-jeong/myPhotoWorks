@@ -111,6 +111,7 @@ class _Strip(QListWidget):
 
     adoption_toggle_requested = pyqtSignal(object, bool)
     context_requested = pyqtSignal(object, object)  # photo, global pos
+    group_navigation_requested = pyqtSignal(int)  # -1 previous, +1 next
 
     def __init__(self) -> None:
         super().__init__()
@@ -164,6 +165,12 @@ class _Strip(QListWidget):
             if photo is not None:
                 self.adoption_toggle_requested.emit(photo, not photo.is_adopted)
                 return
+        if event.key() == Qt.Key.Key_PageUp:
+            self.group_navigation_requested.emit(-1)
+            return
+        if event.key() == Qt.Key.Key_PageDown:
+            self.group_navigation_requested.emit(1)
+            return
         super().keyPressEvent(event)
 
 
@@ -259,6 +266,7 @@ class GroupReviewWindow(QWidget):
         self._strip.currentItemChanged.connect(self._on_strip_current)
         self._strip.adoption_toggle_requested.connect(self._on_toggle)
         self._strip.context_requested.connect(self._on_context)
+        self._strip.group_navigation_requested.connect(self._navigate_group)
         self._splitter = QSplitter(Qt.Orientation.Vertical)
         self._splitter.setChildrenCollapsible(False)
         self._splitter.addWidget(upper)
@@ -287,7 +295,9 @@ class GroupReviewWindow(QWidget):
         self._btn_undo.clicked.connect(self._undo)
         for b in (self._btn_all, self._btn_none, self._btn_rec, self._btn_undo):
             bar.addWidget(b)
-        bar.addWidget(QLabel("← → 이동 · Space 채택 토글 · Ctrl+Z 되돌리기"))
+        bar.addWidget(QLabel(
+            "← → 이동 · Space 채택 토글 · PageUp/PageDown 그룹 이동 · Ctrl+Z 되돌리기"
+        ))
         bar.addStretch()
         self._export_btn = QPushButton()
         self._export_btn.clicked.connect(self._export)
@@ -477,6 +487,15 @@ class GroupReviewWindow(QWidget):
     def _undo(self) -> None:
         if self._session.undo():
             self._after_change("되돌리기")
+
+    def _navigate_group(self, direction: int) -> None:
+        ids = [g.id for g in self._session.groups()]
+        if self._gid not in ids:
+            return
+        k = ids.index(self._gid) + direction
+        if not 0 <= k < len(ids):
+            return
+        self._select_group(ids[k])
 
     def _merge(self, direction: int) -> None:
         ids = [g.id for g in self._session.groups()]

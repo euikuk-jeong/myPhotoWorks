@@ -286,6 +286,22 @@ def test_space_key_toggles_adoption(window, qtbot):
     assert photo.is_adopted != before
 
 
+def test_pageup_pagedown_navigate_groups(window, qtbot):
+    run_grouping(window, qtbot)
+    window._on_review()
+    win = window._review_win
+    qtbot.addWidget(win)
+    session = window._session
+    ids = [g.id for g in session.groups()]
+    assert win._gid == ids[0]
+    qtbot.keyClick(win._strip, Qt.Key.Key_PageDown)
+    assert win._gid == ids[1]
+    qtbot.keyClick(win._strip, Qt.Key.Key_PageUp)
+    assert win._gid == ids[0]
+    qtbot.keyClick(win._strip, Qt.Key.Key_PageUp)   # already at the first group: no-op
+    assert win._gid == ids[0]
+
+
 def test_group_tab_has_three_titled_sections(qtbot):
     from PyQt6.QtWidgets import QGroupBox
 
