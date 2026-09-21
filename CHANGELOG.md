@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.2] - 2026-09-21
+
+### Fixed
+- Linux에서 대문자 확장자(`*.FP1`) 번들 FP1 레시피가 인식되지 않던 문제 수정 (확장자 대소문자 무시)
+- Linux/macOS에서 창 표시 시 Windows 전용 시스템 메뉴 패치(`ctypes.windll`)로 오류가 나던 문제 수정 (Windows에서만 실행)
+
+### Changed
+- ruff 린트 오류 정리 (동작 변경 없음)
+
 ## [1.2.1] - 2026-09-20
 
 ### Changed
