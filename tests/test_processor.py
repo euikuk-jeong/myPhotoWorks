@@ -1,8 +1,6 @@
 """Unit tests for processor.process() and processor.save()."""
-import io
 from pathlib import Path
 
-import pytest
 from PIL import Image
 
 from myphotoworks.models.photo_item import PhotoItem
@@ -59,7 +57,6 @@ class TestProcess:
         # 보정 없이 열었을 때와 동일한 평균 밝기여야 함
         original = Image.open(path).convert("RGB")
         import numpy as np
-        orig_mean = float(np.array(original).mean())
         result_resized = original.resize((1000, 500), Image.Resampling.LANCZOS)
         result_mean = float(np.array(result_resized).mean())
         assert abs(float(np.array(result).mean()) - result_mean) < 2.0

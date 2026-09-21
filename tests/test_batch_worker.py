@@ -1,7 +1,6 @@
 """Unit tests for BatchWorker output path resolution and filename building."""
 from pathlib import Path
 
-import pytest
 from PIL import Image
 
 from myphotoworks.models.photo_item import PhotoItem, ProcessStatus

@@ -4,8 +4,6 @@ from __future__ import annotations
 import numpy as np
 from PIL import Image, ImageFilter
 
-from myphotoworks.recipes.recipe_data import FilmSim
-
 # ---------------------------------------------------------------------------
 # Film simulation LUT profiles
 # Each profile is a list of 256 output values per channel (R, G, B).

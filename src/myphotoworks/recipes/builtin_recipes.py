@@ -5,8 +5,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from myphotoworks.models.settings import CorrectionMode
-from myphotoworks.recipes.recipe_data import FilmSim, RecipeData
 from myphotoworks.recipes.fp1_parser import Fp1Parser
+from myphotoworks.recipes.recipe_data import FilmSim, RecipeData
 
 # ---------------------------------------------------------------------------
 # FP1 directory — src/fuji_fp1/ relative to this package

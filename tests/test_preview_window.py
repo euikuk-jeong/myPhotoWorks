@@ -20,7 +20,6 @@ from PyQt6.QtWidgets import QComboBox, QSlider, QSpinBox
 from myphotoworks.models.photo_item import PhotoItem
 from myphotoworks.models.settings import AppSettings
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

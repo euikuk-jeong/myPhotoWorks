@@ -8,10 +8,8 @@ import time
 from pathlib import Path
 
 from PIL import Image, ImageFile, ImageOps
-
-# Allow Pillow to load truncated/broken JPEG files instead of raising OSError.
-ImageFile.LOAD_TRUNCATED_IMAGES = True
-from PyQt6.QtCore import QEvent, QObject, QPointF, QTimer, Qt, pyqtSignal
+from PyQt6.QtCore import QEvent, QObject, QPointF, QRunnable, Qt, QThreadPool, QTimer, pyqtSignal
+from PyQt6.QtCore import pyqtSignal as _pyqtSignal
 from PyQt6.QtGui import (
     QColor,
     QImage,
@@ -21,7 +19,6 @@ from PyQt6.QtGui import (
     QPixmap,
     QWheelEvent,
 )
-from PyQt6.QtCore import QRunnable, QThreadPool, QTimer, pyqtSignal as _pyqtSignal
 from PyQt6.QtWidgets import (
     QAbstractItemView,
     QApplication,
@@ -34,7 +31,6 @@ from PyQt6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QPushButton,
-
     QSlider,
     QSpinBox,
     QSplitter,
@@ -49,10 +45,15 @@ from myphotoworks.models.photo_item import PhotoItem
 from myphotoworks.models.settings import AppSettings, CorrectionMode
 from myphotoworks.processing import processor
 from myphotoworks.recipes.builtin_recipes import (
-    BUILTIN_RECIPES, build_correction_combo_items, populate_correction_combo,
+    BUILTIN_RECIPES,
+    build_correction_combo_items,
+    populate_correction_combo,
 )
 from myphotoworks.ui.exif_panel import ExifPanel
 from myphotoworks.utils.exif_reader import read_exif
+
+# Allow Pillow to load truncated/broken JPEG files instead of raising OSError.
+ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 _COMBO_ITEMS = build_correction_combo_items()
 
@@ -214,7 +215,9 @@ class _ExifBar(QWidget):
 
         self._table = QTableWidget(len(self._ROWS), 2)
         self._table.horizontalHeader().setVisible(False)
-        self._table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        self._table.horizontalHeader().setSectionResizeMode(
+            0, QHeaderView.ResizeMode.ResizeToContents
+        )
         self._table.horizontalHeader().setStretchLastSection(True)
         self._table.verticalHeader().setVisible(False)
         self._table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
@@ -711,7 +714,10 @@ class PreviewWindow(QMainWindow):
 
         status_bar = QStatusBar()
         self.setStatusBar(status_bar)
-        hint = QLabel("1:Before저장(리사이즈만)  2:After-A저장  3:After-B저장  Del:원본삭제  `/←:이전  4/→:다음  E:EXIF  Home:화면맞춤")
+        hint = QLabel(
+            "1:Before저장(리사이즈만)  2:After-A저장  3:After-B저장  Del:원본삭제  "
+            "`/←:이전  4/→:다음  E:EXIF  Home:화면맞춤"
+        )
         hint.setObjectName("hint-label")
         status_bar.addWidget(hint)
 
@@ -1051,7 +1057,8 @@ class PreviewWindow(QMainWindow):
             QMessageBox.information(
                 self,
                 "미리보기 완료",
-                f"모든 사진을 검토했습니다.\n\n전체 {total}개 중 {self._saved_count}개가 저장되었습니다.",
+                f"모든 사진을 검토했습니다.\n\n"
+                f"전체 {total}개 중 {self._saved_count}개가 저장되었습니다.",
             )
 
     def _resolve_output_path(self, photo: PhotoItem, settings: AppSettings) -> Path:

@@ -3,8 +3,8 @@ from __future__ import annotations
 
 from PIL import Image
 
-from myphotoworks.recipes.recipe_data import FilmSim, RecipeData
 from myphotoworks.recipes import recipe_effects
+from myphotoworks.recipes.recipe_data import FilmSim, RecipeData
 
 
 def apply_recipe(image: Image.Image, recipe: RecipeData) -> Image.Image:

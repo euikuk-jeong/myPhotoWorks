@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import dataclasses
+import sys
 from pathlib import Path
 
 from PyQt6.QtCore import Qt
@@ -582,6 +583,8 @@ class MainWindow(QMainWindow):
 
     def _patch_system_menu(self) -> None:
         """Windows 시스템 메뉴(타이틀바 우클릭)에 '정보' 항목을 추가한다."""
+        if sys.platform != "win32":
+            return
         import ctypes
 
         MF_SEPARATOR = 0x0800

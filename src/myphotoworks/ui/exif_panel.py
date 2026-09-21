@@ -41,7 +41,9 @@ class ExifPanel(QDialog):
 
         self._table = QTableWidget(0, 2)
         self._table.setHorizontalHeaderLabels(["항목", "정보"])
-        self._table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        self._table.horizontalHeader().setSectionResizeMode(
+            0, QHeaderView.ResizeMode.ResizeToContents
+        )
         self._table.horizontalHeader().setStretchLastSection(True)
         self._table.horizontalHeader().setFont(QFont("", -1, QFont.Weight.Bold))
         self._table.verticalHeader().setVisible(False)
