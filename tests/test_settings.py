@@ -3,7 +3,10 @@ import copy
 from pathlib import Path
 
 from myphotoworks.models.settings import (
-    AppSettings, CorrectionMode, OutputPathMode, ResizeAxis,
+    AppSettings,
+    CorrectionMode,
+    OutputPathMode,
+    ResizeAxis,
 )
 
 

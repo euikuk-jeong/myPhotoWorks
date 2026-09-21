@@ -2,10 +2,11 @@
 import json
 from pathlib import Path
 
-import pytest
-
 from myphotoworks.models.settings import (
-    AppSettings, CorrectionMode, OutputPathMode, ResizeAxis,
+    AppSettings,
+    CorrectionMode,
+    OutputPathMode,
+    ResizeAxis,
 )
 from myphotoworks.utils.config import load_settings, save_settings
 

@@ -1,19 +1,17 @@
 """Tests for recipe_processor and builtin_recipes."""
 import numpy as np
-import pytest
 from PIL import Image
 
-from myphotoworks.recipes.recipe_data import FilmSim, RecipeData
-from myphotoworks.recipes.recipe_processor import apply_recipe
+from myphotoworks.models.settings import CorrectionMode
 from myphotoworks.recipes.builtin_recipes import (
     BUILTIN_RECIPES,
     RECIPE_DISPLAY_ORDER,
-    RECIPE_COLORS,
-    recipe_color,
-    build_correction_combo_items,
     ComboItem,
+    build_correction_combo_items,
+    recipe_color,
 )
-from myphotoworks.models.settings import CorrectionMode
+from myphotoworks.recipes.recipe_data import FilmSim, RecipeData
+from myphotoworks.recipes.recipe_processor import apply_recipe
 
 
 def _solid(r: int, g: int, b: int, size: int = 64) -> Image.Image:

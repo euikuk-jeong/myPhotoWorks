@@ -6,7 +6,10 @@ from pathlib import Path
 
 from myphotoworks.core.grouping import GroupingMode
 from myphotoworks.models.settings import (
-    AppSettings, CorrectionMode, OutputPathMode, ResizeAxis,
+    AppSettings,
+    CorrectionMode,
+    OutputPathMode,
+    ResizeAxis,
 )
 
 _CONFIG_PATH = Path.home() / ".myphotoworks" / "config.json"

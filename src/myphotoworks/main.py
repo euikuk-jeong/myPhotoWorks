@@ -8,10 +8,13 @@ from PyQt6.QtWidgets import QApplication
 from myphotoworks.ui.main_window import MainWindow
 from myphotoworks.ui.styles import load_glass_theme
 
+
 def _get_resource_path(relative: str) -> Path:
     """Return the absolute path to a bundled resource (works both in dev and PyInstaller)."""
     base = Path(getattr(sys, "_MEIPASS", Path(__file__).parent))
-    return base / "myphotoworks" / relative if hasattr(sys, "_MEIPASS") else Path(__file__).parent / relative
+    if hasattr(sys, "_MEIPASS"):
+        return base / "myphotoworks" / relative
+    return Path(__file__).parent / relative
 
 
 _ICON_PATH = _get_resource_path("resources/myphotoworks.ico")

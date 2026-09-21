@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import sys
-from importlib.metadata import version, PackageNotFoundError
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
 from PyQt6.QtCore import Qt

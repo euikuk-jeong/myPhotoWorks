@@ -24,10 +24,15 @@ from PyQt6.QtWidgets import (
 )
 
 from myphotoworks.models.settings import (
-    AppSettings, CorrectionMode, OutputPathMode, ResizeAxis,
+    AppSettings,
+    CorrectionMode,
+    OutputPathMode,
+    ResizeAxis,
 )
 from myphotoworks.recipes.builtin_recipes import (
-    BUILTIN_RECIPES, build_correction_combo_items, populate_correction_combo,
+    BUILTIN_RECIPES,
+    build_correction_combo_items,
+    populate_correction_combo,
 )
 
 RESIZE_PRESETS = [1080, 1920, 2048, 2560, 3840]
@@ -130,7 +135,8 @@ class SettingsPanel(QTabWidget):
         self._recipe_info_group = QGroupBox("레시피 정보")
         self._recipe_info_layout = QFormLayout(self._recipe_info_group)
         self._recipe_info_labels: dict[str, QLabel] = {}
-        for field_name in ("필름 시뮬레이션", "화이트밸런스", "톤 커브", "채도", "선명도", "그레인"):
+        recipe_fields = ("필름 시뮬레이션", "화이트밸런스", "톤 커브", "채도", "선명도", "그레인")
+        for field_name in recipe_fields:
             lbl = QLabel("—")
             lbl.setWordWrap(True)
             self._recipe_info_layout.addRow(field_name, lbl)

@@ -1,5 +1,4 @@
 """Tests for recipe_data module."""
-import pytest
 from myphotoworks.recipes.recipe_data import FilmSim, RecipeData
 
 

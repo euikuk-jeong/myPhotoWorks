@@ -157,7 +157,8 @@ def read_exif(path: Path) -> dict[str, str]:
     raw_comment = exif_ifd.get(piexif.ExifIFD.UserComment)
     if raw_comment and len(raw_comment) > 8:
         try:
-            result["comment"] = raw_comment[8:].decode("utf-8", errors="replace").rstrip("\x00").strip()
+            text = raw_comment[8:].decode("utf-8", errors="replace")
+            result["comment"] = text.rstrip("\x00").strip()
         except Exception:
             pass
 
