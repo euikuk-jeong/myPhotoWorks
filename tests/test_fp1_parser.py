@@ -7,7 +7,6 @@ import pytest
 from myphotoworks.recipes.fp1_parser import Fp1Parser, _parse_film_sim, _parse_wb_kelvin
 from myphotoworks.recipes.recipe_data import FilmSim, RecipeData
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -230,6 +229,12 @@ class TestFp1ParserParseDir:
         (tmp_path / "notes.txt").write_text("ignored")
         result = Fp1Parser().parse_dir(tmp_path)
         assert list(result.keys()) == ["good"]
+
+    def test_matches_extension_case_insensitively(self, tmp_path):
+        _write_fp1(tmp_path, _MINIMAL_FP1, "Upper Case.FP1")
+        _write_fp1(tmp_path, _MINIMAL_FP1, "lower.fp1")
+        result = Fp1Parser().parse_dir(tmp_path)
+        assert set(result.keys()) == {"Upper Case", "lower"}
 
     def test_skips_malformed_files(self, tmp_path):
         _write_fp1(tmp_path, _MINIMAL_FP1, "ok.fp1")

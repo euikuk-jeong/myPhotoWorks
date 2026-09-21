@@ -136,7 +136,7 @@ class Fp1Parser:
         recipes: dict[str, RecipeData] = {}
         if not folder.exists():
             return recipes
-        for fp1_file in sorted(folder.glob("*.fp1")):
+        for fp1_file in sorted(f for f in folder.iterdir() if f.suffix.lower() == ".fp1"):
             key = fp1_file.stem
             try:
                 recipes[key] = self.parse(fp1_file)
