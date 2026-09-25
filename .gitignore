@@ -212,6 +212,7 @@ doc/
 
 # Claude Code local settings and skills
 .claude/
+CLAUDE.md
 
 # PyInstaller build output
 /release/
