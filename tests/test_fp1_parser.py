@@ -258,7 +258,7 @@ class TestFp1ParserParseDir:
 
 
 # ---------------------------------------------------------------------------
-# Bundled FP1 files in src/fuji_fp1/
+# Bundled FP1 files in src/myphotoworks/recipes/fuji_fp1/
 # ---------------------------------------------------------------------------
 
 class TestBundledFp1Files:
@@ -302,3 +302,22 @@ class TestBundledFp1Files:
         for key, rd in bundled.items():
             assert 2500 <= rd.wb_kelvin <= 10000, \
                 f"Recipe '{key}' wb_kelvin={rd.wb_kelvin} out of range"
+
+
+class TestFp1DirLocation:
+    """FP1 폴더는 패키지 내부에 있어야 wheel/exe 설치본에도 포함된다."""
+
+    def test_fp1_dir_is_inside_package(self):
+        import myphotoworks
+        from myphotoworks.recipes.builtin_recipes import _FP1_DIR
+        pkg_dir = Path(myphotoworks.__file__).parent
+        assert _FP1_DIR.is_relative_to(pkg_dir)
+        assert any(_FP1_DIR.glob("*.fp1")) or any(_FP1_DIR.glob("*.FP1"))
+
+    def test_fp1_dir_uses_meipass_when_frozen(self, monkeypatch, tmp_path):
+        import sys
+
+        from myphotoworks.recipes import builtin_recipes
+        monkeypatch.setattr(sys, "frozen", True, raising=False)
+        monkeypatch.setattr(sys, "_MEIPASS", str(tmp_path), raising=False)
+        assert builtin_recipes._fp1_dir() == tmp_path / "myphotoworks" / "recipes" / "fuji_fp1"

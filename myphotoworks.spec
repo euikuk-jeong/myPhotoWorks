@@ -15,6 +15,7 @@ a = Analysis(
     datas=[
         (str(src_dir / "myphotoworks" / "resources"), "myphotoworks/resources"),
         (str(src_dir / "myphotoworks" / "ui" / "styles"), "myphotoworks/ui/styles"),
+        (str(src_dir / "myphotoworks" / "recipes" / "fuji_fp1"), "myphotoworks/recipes/fuji_fp1"),
     ],
     hiddenimports=[
         "myphotoworks",

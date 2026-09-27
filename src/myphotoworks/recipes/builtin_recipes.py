@@ -1,6 +1,7 @@
-"""Built-in film simulation recipes — loaded from src/fuji_fp1/ at import time."""
+"""Built-in film simulation recipes — loaded from recipes/fuji_fp1/ at import time."""
 from __future__ import annotations
 
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -9,12 +10,20 @@ from myphotoworks.recipes.fp1_parser import Fp1Parser
 from myphotoworks.recipes.recipe_data import FilmSim, RecipeData
 
 # ---------------------------------------------------------------------------
-# FP1 directory — src/fuji_fp1/ relative to this package
+# FP1 directory — shipped inside the package so wheel/exe builds include it
 # Layout:  src/myphotoworks/recipes/builtin_recipes.py
-#          src/fuji_fp1/*.fp1
+#          src/myphotoworks/recipes/fuji_fp1/*.fp1
 # ---------------------------------------------------------------------------
 
-_FP1_DIR: Path = Path(__file__).parent.parent.parent / "fuji_fp1"
+
+def _fp1_dir() -> Path:
+    """Return the FP1 folder, also inside a PyInstaller bundle (sys._MEIPASS)."""
+    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+        return Path(sys._MEIPASS) / "myphotoworks" / "recipes" / "fuji_fp1"
+    return Path(__file__).parent / "fuji_fp1"
+
+
+_FP1_DIR: Path = _fp1_dir()
 
 # Load at import time: key = filename stem (e.g. "velvia"), value = RecipeData
 BUILTIN_RECIPES: dict[str, RecipeData] = Fp1Parser().parse_dir(_FP1_DIR)

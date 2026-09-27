@@ -26,7 +26,6 @@ def process(
     """Apply the effect chain and return the processed image.
 
     apply_effects=False skips color corrections and applies only resize.
-    Used when saving with key '1' (Before pane — resize only).
 
     source_image: optional pre-loaded PIL Image to skip disk I/O.
 
