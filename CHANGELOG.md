@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.2] - 2026-09-27
+
+### Fixed
+- 썸네일 상태 배지가 사진 맨 아래에서 떠 보이던 문제 — 맨 아래 줄에 표시하고, 흐림 배지가 있을 때만 그 윗줄로 올림. 세로 사진에서도 점수 배지와 겹치지 않음
+
 ## [1.4.1] - 2026-09-27
 
 ### Fixed
