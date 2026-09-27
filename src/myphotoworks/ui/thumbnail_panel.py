@@ -69,6 +69,15 @@ def pick_loop_path(photo_rect: QRectF) -> QPainterPath:
     return path
 
 
+def status_badge(status: ProcessStatus) -> tuple[str, str] | None:
+    """Badge (text, colour token) shown on a card for a batch status; None when pending."""
+    return {
+        ProcessStatus.PROCESSING: ("처리중", tokens.TEXT_MUTED),
+        ProcessStatus.DONE: ("완료", tokens.OK),
+        ProcessStatus.ERROR: ("오류", tokens.DANGER),
+    }.get(status)
+
+
 class _LoaderSignals(QObject):
     loaded = pyqtSignal(str, QImage, int, int)   # path, thumbnail, original width, height
 
@@ -130,11 +139,24 @@ class _CardDelegate(QStyledItemDelegate):
     def paint(self, painter: QPainter, option: QStyleOptionViewItem, index) -> None:
         super().paint(painter, option, index)
         photo = index.data(_PHOTO_ROLE)
-        if photo is None or not self._panel.grouping_active:
+        if photo is None:
             return
         r = self.photo_rect(option.rect, index)
         painter.save()
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        status = status_badge(photo.status)
+        if status is not None:
+            # one row above the blur badge slot so the two never overlap
+            text, color = status
+            badge = QRect(r.left() + 5, r.bottom() - 39, 40, 16)
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(tokens.color(color, 230))
+            painter.drawRoundedRect(badge, 4, 4)
+            painter.setPen(QColor(tokens.ON_PRIMARY))
+            painter.drawText(badge, Qt.AlignmentFlag.AlignCenter, text)
+        if not self._panel.grouping_active:
+            painter.restore()
+            return
         if photo.is_adopted:
             pen = QPen(_ACCENT, 2.4)
             pen.setCapStyle(Qt.PenCapStyle.RoundCap)
@@ -309,12 +331,12 @@ class ThumbnailPanel(QListWidget):
         return [p for p in self._rows if p is not None]
 
     def update_status(self, photo: PhotoItem) -> None:
-        """Refresh the status badge text for the given photo."""
+        """Repaint the given photo's card so its status badge follows ``photo.status``."""
         for i, p in enumerate(self._rows):
             if p is not None and p.source_path == photo.source_path:
                 item = self.item(i)
                 if item:
-                    item.setText(self._status_label(photo))
+                    self.viewport().update(self.visualItemRect(item))
                 break
 
     # ---- grouping display ------------------------------------------------
@@ -509,16 +531,6 @@ class ThumbnailPanel(QListWidget):
     # ------------------------------------------------------------------
     # Private helpers
     # ------------------------------------------------------------------
-
-    @staticmethod
-    def _status_label(photo: PhotoItem) -> str:
-        labels = {
-            ProcessStatus.PENDING: "",
-            ProcessStatus.PROCESSING: "처리중",
-            ProcessStatus.DONE: "완료",
-            ProcessStatus.ERROR: "오류",
-        }
-        return labels.get(photo.status, "")
 
     def _on_row_changed(self, row: int) -> None:
         if 0 <= row < len(self._rows) and self._rows[row] is not None:

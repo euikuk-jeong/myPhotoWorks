@@ -105,3 +105,25 @@ def test_clicking_checkbox_requests_adoption_toggle(qtbot, tmp_path):
     with qtbot.waitSignal(panel.adoption_toggle_requested, timeout=1000) as sig:
         QTest.mouseClick(panel.viewport(), Qt.MouseButton.LeftButton, pos=box.center())
     assert sig.args == [photo, not photo.is_adopted]
+
+
+def test_status_badge_maps_batch_states():
+    from myphotoworks.models.photo_item import ProcessStatus
+    from myphotoworks.ui.thumbnail_panel import status_badge
+
+    assert status_badge(ProcessStatus.PENDING) is None
+    assert status_badge(ProcessStatus.PROCESSING)[0] == "처리중"
+    assert status_badge(ProcessStatus.DONE)[0] == "완료"
+    assert status_badge(ProcessStatus.ERROR)[0] == "오류"
+
+
+def test_update_status_keeps_file_name_on_card(qtbot, tmp_path):
+    from myphotoworks.models.photo_item import ProcessStatus
+
+    panel = _loaded_panel(qtbot, tmp_path)
+    photo = panel.all_photos()[0]
+    for status in (ProcessStatus.PROCESSING, ProcessStatus.DONE, ProcessStatus.ERROR):
+        photo.status = status
+        panel.update_status(photo)
+        panel.grab()                      # paint the badge path once per state
+        assert panel.item(0).text() == "a.jpg"
