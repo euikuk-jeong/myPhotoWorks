@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-09-27
+
+### Added
+- 미리보기 화면 1도 보정 방식·밝기·대비를 선택 가능 (기존 "보정 없음" 고정) — 세 화면 모두 각자 보정 설정을 가지며, 1/2/3 키는 해당 화면 설정으로 저장. 화면 1의 기본값은 기존과 같은 "보정 없음"
+- 미리보기 각 화면 제목에 선택한 보정 방식 이름 표시 ("보정 없음", "Auto Level", 레시피명 등)
+
+### Changed
+- 미리보기 원본 화면 하단의 EXIF 표를 제거하고 별도 EXIF 창(E 키 / EXIF 버튼)으로 표시. E 키와 EXIF 버튼의 눌림 상태가 함께 바뀜
+- FP1 레시피 폴더를 `src/fuji_fp1/` → `src/myphotoworks/recipes/fuji_fp1/`로 이동 (새 FP1 파일은 이 위치에 추가)
+
+### Fixed
+- wheel 설치본·exe에서 Fujifilm 레시피 목록이 비어 있던 문제 수정 (FP1 폴더가 패키지·PyInstaller 번들에 포함되지 않았음)
+
 ## [1.2.2] - 2026-09-21
 
 ### Fixed
