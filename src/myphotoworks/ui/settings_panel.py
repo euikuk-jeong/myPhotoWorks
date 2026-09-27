@@ -65,6 +65,9 @@ class SettingsPanel(QTabWidget):
         self.addTab(self._build_resize_tab(), "리사이즈")
         self.addTab(self._build_output_tab(), "출력")
         self._build_group_tab()
+        # section contents line up with their (flush-left) titles; see QGroupBox in QSS
+        for box in self.findChildren(QGroupBox):
+            box.layout().setContentsMargins(0, 8, 0, 4)
 
     def settings(self) -> AppSettings:
         return self._settings
@@ -106,6 +109,7 @@ class SettingsPanel(QTabWidget):
     def _build_effects_tab(self) -> QWidget:
         tab = QWidget()
         layout = QVBoxLayout(tab)
+        layout.setContentsMargins(14, 8, 14, 12)
         layout.setSpacing(10)
         layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
@@ -199,6 +203,7 @@ class SettingsPanel(QTabWidget):
     def _build_resize_tab(self) -> QWidget:
         tab = QWidget()
         layout = QVBoxLayout(tab)
+        layout.setContentsMargins(14, 8, 14, 12)
         layout.setSpacing(10)
         layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
@@ -261,6 +266,7 @@ class SettingsPanel(QTabWidget):
     def _build_output_tab(self) -> QWidget:
         tab = QWidget()
         layout = QVBoxLayout(tab)
+        layout.setContentsMargins(14, 8, 14, 12)
         layout.setSpacing(10)
         layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
