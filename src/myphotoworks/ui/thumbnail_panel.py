@@ -123,11 +123,9 @@ class _CardDelegate(QStyledItemDelegate):
         left = item_rect.left() + (item_rect.width() - box.width()) // 2
         icon = index.data(Qt.ItemDataRole.DecorationRole)
         size = icon.actualSize(box) if isinstance(icon, QIcon) and not icon.isNull() else box
-        return QRect(
-            left + (box.width() - size.width()) // 2,
-            top + (box.height() - size.height()) // 2,
-            size.width(), size.height(),
-        )
+        # IconMode centres the pixmap horizontally but pins it to the top of the box
+        # (visible with a landscape photo in the review strip's square box)
+        return QRect(left + (box.width() - size.width()) // 2, top, size.width(), size.height())
 
     def paint(self, painter: QPainter, option: QStyleOptionViewItem, index) -> None:
         super().paint(painter, option, index)

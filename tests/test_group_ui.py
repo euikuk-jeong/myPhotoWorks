@@ -96,13 +96,27 @@ def test_status_bar_splits_counts_adopted_and_selected_file(window, qtbot):
     assert window._pick_label.text() == "채택 4장"
     photo = window._thumb_panel.photos()[0]
     window._show_file(photo)
-    assert window._file_label.text().startswith(photo.source_path.name)
+    text = window._file_label.text()
+    assert text.startswith(f"[{photo.source_path.name}]")
+    size = window._thumb_panel.image_size(photo)
+    if size is not None:
+        assert text.endswith(f"해상도: {size[0]:,} x {size[1]:,}")
 
 
 def test_toolbar_marks_process_as_primary_and_view_as_segments(window):
     assert window._process_btn.property("primary") is True
     assert window._all_view_btn.property("segment") is True
     assert window._remove_btn.property("quiet") is True
+
+
+def test_adoption_bar_fill_is_proportional_with_visible_minimum():
+    from myphotoworks.ui.group_review_window import adoption_bar_fill
+
+    assert adoption_bar_fill(72, 0, 12) == 0
+    assert adoption_bar_fill(72, 6, 12) == 36
+    assert adoption_bar_fill(72, 12, 12) == 72
+    assert adoption_bar_fill(72, 1, 500) == 4      # a sliver stays visible
+    assert adoption_bar_fill(72, 3, 0) == 0
 
 
 def test_group_summary_text_uses_thousands_separator():

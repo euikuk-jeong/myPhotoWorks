@@ -73,7 +73,7 @@ DETAIL_LONG_SIDE = 4000    # loaded on first zoom-in so detail is not blurry
 DETAIL_CACHE = 3
 GROUP_THUMB = 56
 GROUP_ROW_HEIGHT = GROUP_THUMB + 16
-GROUP_MAX_DOTS = 8         # adoption dots per card; bigger groups show only the count
+GROUP_BAR_W = 72           # adoption ratio bar on each group card
 _SUMMARY_ROLE = Qt.ItemDataRole.UserRole + 1
 _TAG_COLORS = {TAG_TODO: QColor(tokens.WARN), TAG_REVIEWED: QColor(tokens.OK),
                TAG_EDITED: QColor(tokens.PRIMARY)}
@@ -102,6 +102,16 @@ class GroupSummary:
     @property
     def text(self) -> str:
         return f"그룹 {self.number:,} · {self.count:,}장 · 채택 {self.adopted:,}  [{self.tag}]"
+
+
+def adoption_bar_fill(width: float, adopted: int, count: int) -> float:
+    """Filled length of a ``width``-long bar for ``adopted`` of ``count`` photos.
+
+    Any adoption shows at least a sliver, so "1 of 50" is still visible.
+    """
+    if count <= 0 or adopted <= 0:
+        return 0.0
+    return max(4.0, width * min(adopted, count) / count)
 
 
 def group_summary(session: GroupSession, group: Group, number: int) -> GroupSummary:
@@ -220,15 +230,18 @@ class _GroupDelegate(QStyledItemDelegate):
         row = QRect(x, top + 2 * line_h, right - x, line_h)
         painter.setPen(QColor(tokens.PICK_TEXT) if s.adopted else QColor(tokens.TEXT_MUTED))
         painter.drawText(row, Qt.AlignmentFlag.AlignVCenter, adopted)
-        if s.count <= GROUP_MAX_DOTS:
-            d = 7
-            cx = x + painter.fontMetrics().horizontalAdvance(adopted) + 8
-            cy = row.center().y() - d // 2
-            for k in range(s.count):
-                on = k < s.adopted
-                painter.setPen(QPen(_STAR if on else QColor(tokens.TEXT_DISABLED), 1))
-                painter.setBrush(_STAR if on else Qt.BrushStyle.NoBrush)
-                painter.drawEllipse(QRect(cx + k * (d + 3), cy, d, d))
+        # adoption ratio bar: same width whatever the group size
+        bx = x + painter.fontMetrics().horizontalAdvance(adopted) + 10
+        bw = min(GROUP_BAR_W, right - bx)
+        if bw > 8:
+            track = QRectF(bx, row.center().y() - 2, bw, 4)
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QColor(tokens.RAISED))
+            painter.drawRoundedRect(track, 2, 2)
+            fill = adoption_bar_fill(bw, s.adopted, s.count)
+            if fill:
+                painter.setBrush(_STAR)
+                painter.drawRoundedRect(QRectF(bx, track.top(), fill, 4), 2, 2)
         painter.restore()
 
 

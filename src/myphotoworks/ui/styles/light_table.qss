@@ -1,6 +1,6 @@
 /* ============================================================
    myPhotoWorks — Light Table theme
-   Neutral mid-grey workspace; ochre only marks picks.
+   Neutral mid-grey workspace; sage green only marks picks.
    Colour tokens (at-sign + lower-case name) are resolved from
    ui/styles/tokens.py at load time.
    ============================================================ */
@@ -208,9 +208,9 @@ QPushButton[text="..."] {
 QGroupBox {
     background: transparent;
     border: none;
-    border-top: 1px solid @divider;
-    margin-top: 20px;
-    padding: 12px 0 0 0;
+    border-top: 1px solid @line;
+    margin-top: 28px;
+    padding: 14px 0 0 0;
 }
 
 QGroupBox::title {
@@ -219,9 +219,9 @@ QGroupBox::title {
     left: 0px;
     top: 0px;
     padding: 0;
-    color: @text_muted;
-    font-size: 9pt;
-    font-weight: 500;
+    color: @text_strong;
+    font-size: 10.5pt;
+    font-weight: 600;
 }
 
 /* ------------------------------------------------------------
