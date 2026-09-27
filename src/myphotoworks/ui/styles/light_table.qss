@@ -461,6 +461,25 @@ QLabel {
     color: @text;
 }
 
+/* Preview pane header: key cap (1/2/3) + correction name */
+QWidget#pane-header {
+    background: @panel;
+    border-bottom: 1px solid @edge;
+}
+
+QWidget#pane-controls {
+    background: @panel;
+    border-top: 1px solid @edge;
+}
+
+QLabel#pane-number {
+    background: @raised;
+    color: @text_strong;
+    border-radius: 4px;
+    font-size: 8.5pt;
+    font-weight: 600;
+}
+
 QLabel[class="title-label"],
 QLabel#pane-title {
     background: transparent;
@@ -580,7 +599,7 @@ QListWidget::item:hover:!selected {
    ------------------------------------------------------------ */
 QTableWidget {
     background: transparent;
-    alternate-background-color: @panel;
+    alternate-background-color: @sunken;
     border: none;
     gridline-color: @divider;
     color: @text;
@@ -700,6 +719,12 @@ QLabel#sectionTitle {
 QLabel#viewTitle {
     color: @text_strong;
     font-size: 11pt;
+    font-weight: 600;
+}
+
+QLabel#aboutTitle {
+    color: @text_strong;
+    font-size: 16pt;
     font-weight: 600;
 }
 

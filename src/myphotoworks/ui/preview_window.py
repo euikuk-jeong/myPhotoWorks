@@ -58,7 +58,7 @@ _COMBO_ITEMS = build_correction_combo_items()
 
 logger = logging.getLogger(__name__)
 
-_BOTTOM_BAR_HEIGHT = 200
+_BOTTOM_BAR_HEIGHT = 224
 _ZOOM_FACTOR = 1.15
 _ZOOM_MIN = 0.05
 _ZOOM_MAX = 20.0
@@ -225,14 +225,17 @@ class _EffectsBar(QWidget):
 
     def __init__(self, settings: AppSettings, parent=None) -> None:
         super().__init__(parent)
+        self.setObjectName("pane-controls")  # styled in light_table.qss
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setFixedHeight(_BOTTOM_BAR_HEIGHT)
         self._settings = copy.copy(settings)
         self._build()
 
     def _build(self) -> None:
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(4, 4, 4, 4)
-        layout.setSpacing(3)
+        layout.setContentsMargins(12, 10, 12, 10)
+        layout.setSpacing(6)
+        layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
         # Correction mode dropdown
         self._mode_combo = QComboBox()
@@ -405,16 +408,29 @@ class _MiniSlider(QWidget):
 # ---------------------------------------------------------------------------
 
 class _Pane(QWidget):
-    def __init__(self, title: str, bottom_widget: QWidget | None = None, parent=None) -> None:
+    def __init__(self, title: str, bottom_widget: QWidget | None = None, number: int = 0,
+                 parent=None) -> None:
         super().__init__(parent)
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(2, 2, 2, 2)
-        layout.setSpacing(2)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
 
+        header = QWidget()
+        header.setObjectName("pane-header")  # styled in light_table.qss
+        hl = QHBoxLayout(header)
+        hl.setContentsMargins(12, 6, 12, 6)
+        hl.setSpacing(8)
+        if number:
+            # the pane's save key (1/2/3), drawn as a small key cap
+            key = QLabel(str(number))
+            key.setObjectName("pane-number")
+            key.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            key.setFixedSize(20, 20)
+            hl.addWidget(key)
         self._title_lbl = QLabel(title)
         self._title_lbl.setObjectName("pane-title")
-        self._title_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(self._title_lbl)
+        hl.addWidget(self._title_lbl, 1)
+        layout.addWidget(header)
 
         self.image_view = _ImageView()
         layout.addWidget(self.image_view, stretch=1)
@@ -599,8 +615,8 @@ class PreviewWindow(QMainWindow):
         central = QWidget()
         self.setCentralWidget(central)
         root = QVBoxLayout(central)
-        root.setContentsMargins(4, 4, 4, 4)
-        root.setSpacing(4)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(0)
 
         self._splitter = QSplitter(Qt.Orientation.Horizontal)
 
@@ -609,7 +625,7 @@ class PreviewWindow(QMainWindow):
         for i in range(_PANE_COUNT):
             bar = _EffectsBar(initial_pane_settings(self._base_settings, i))
             bar.settings_changed.connect(self._debounces[i].start)
-            pane = _Pane(bar.mode_label(), bar)
+            pane = _Pane(bar.mode_label(), bar, number=i + 1)
             bar.mode_label_changed.connect(pane.set_title)
             pane.image_view.view_changed.connect(self._on_view_changed)
             pane.image_view.fit_requested.connect(self._on_fit_requested)
@@ -624,46 +640,41 @@ class PreviewWindow(QMainWindow):
         action_widget = QWidget()
         action_widget.setObjectName("preview-action-bar")  # styled in light_table.qss
         action_bar = QHBoxLayout(action_widget)
-        action_bar.setContentsMargins(8, 6, 8, 6)
+        action_bar.setContentsMargins(16, 10, 16, 10)
         action_bar.setSpacing(6)
 
-        def _btn(label: str, shortcut: str, callback) -> QPushButton:
-            btn = QPushButton(f"{label}\n[{shortcut}]")
-            btn.setFixedHeight(44)
-            btn.clicked.connect(callback)
+        def _btn(label: str, shortcut: str, callback=None) -> QPushButton:
+            btn = QPushButton(label)
+            btn.setFixedHeight(34)
+            btn.setToolTip(f"단축키: {shortcut}")
+            if callback is not None:
+                btn.clicked.connect(callback)
+            action_bar.addWidget(btn)
             return btn
 
+        # navigate ……… save with option 1/2/3 ……… inspect / destructive (far right)
+        self._prev_btn = _btn("← 이전", "← 또는 `", self._go_prev)
+        self._next_btn = _btn("다음 →", "→ 또는 4", self._go_next)
+        action_bar.addStretch()
+        _btn("1 선택", "1", self._on_save_1)
+        _btn("2 선택", "2", self._on_save_2)
+        _btn("3 선택", "3", self._on_save_3)
         action_bar.addStretch()
 
-        self._prev_btn = _btn("이전", "←", self._go_prev)
-        action_bar.addWidget(self._prev_btn)
-
-        action_bar.addWidget(_btn("1 선택", "1", self._on_save_1))
-        action_bar.addWidget(_btn("2 선택", "2", self._on_save_2))
-        action_bar.addWidget(_btn("3 선택", "3", self._on_save_3))
+        self._exif_btn = _btn("EXIF", "E")
+        self._exif_btn.setCheckable(True)
+        self._exif_btn.toggled.connect(self._toggle_exif)
 
         del_btn = _btn("원본 삭제", "Del", self._on_delete)
         del_btn.setObjectName("delete-btn")
-        action_bar.addWidget(del_btn)
-
-        self._exif_btn = QPushButton("EXIF\n[E]")
-        self._exif_btn.setFixedHeight(44)
-        self._exif_btn.setCheckable(True)
-        self._exif_btn.toggled.connect(self._toggle_exif)
-        action_bar.addWidget(self._exif_btn)
-
-        self._next_btn = _btn("다음", "→", self._go_next)
-        action_bar.addWidget(self._next_btn)
-
-        action_bar.addStretch()
 
         root.addWidget(action_widget)
 
         status_bar = QStatusBar()
         self.setStatusBar(status_bar)
         hint = QLabel(
-            "1/2/3:해당 옵션으로 저장  Del:원본삭제  "
-            "`/←:이전  4/→:다음  E:EXIF  Home:화면맞춤"
+            "1 · 2 · 3  해당 옵션으로 저장      Del  원본 삭제      ← `  이전      → 4  다음"
+            "      E  EXIF      Home  화면 맞춤"
         )
         hint.setObjectName("hint-label")
         status_bar.addWidget(hint)

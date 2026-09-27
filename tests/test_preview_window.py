@@ -526,6 +526,11 @@ class TestOptionPanes:
         title = [p.findChild(QLabel, "pane-title").text() for p in window._panes]
         assert title == ["보정 없음", "Auto Level", items[recipe_idx].label]
 
+    def test_pane_headers_show_save_key_numbers(self, window):
+        from PyQt6.QtWidgets import QLabel
+        numbers = [p.findChild(QLabel, "pane-number").text() for p in window._panes]
+        assert numbers == ["1", "2", "3"]
+
     def test_no_inline_exif_bar(self, window):
         assert not hasattr(window, "_exif_bar")
 

@@ -33,13 +33,13 @@ class AboutDialog(QDialog):
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self.setWindowTitle("myPhotoWorks 정보")
-        self.setFixedSize(360, 300)
+        self.setFixedSize(380, 360)
         self.setWindowFlags(self.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint)
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
 
         layout = QVBoxLayout(self)
-        layout.setSpacing(8)
-        layout.setContentsMargins(24, 20, 24, 16)
+        layout.setSpacing(6)
+        layout.setContentsMargins(28, 28, 28, 20)
 
         # App icon
         icon_path = _get_icon_path()
@@ -54,19 +54,23 @@ class AboutDialog(QDialog):
             icon_label.setFixedSize(80, 80)
             icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             layout.addWidget(icon_label, alignment=Qt.AlignmentFlag.AlignHCenter)
+            layout.addSpacing(10)
 
         # App name
-        name_label = QLabel("<b style='font-size:16pt'>myPhotoWorks</b>")
+        name_label = QLabel("myPhotoWorks")
+        name_label.setObjectName("aboutTitle")  # styled in light_table.qss
         name_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(name_label)
 
         # Version
         ver_label = QLabel(f"버전 {_get_version()}")
+        ver_label.setObjectName("hint-label")
         ver_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(ver_label)
+        layout.addSpacing(8)
 
         # Description
-        desc_label = QLabel("사진 일괄 처리 애플리케이션\n(리사이즈 · Auto Level · Auto Contrast)")
+        desc_label = QLabel("사진 일괄 보정·선별 애플리케이션\n필름 레시피, 그룹 리뷰, 리사이즈")
         desc_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(desc_label)
 
@@ -91,5 +95,6 @@ class AboutDialog(QDialog):
 
         # OK button
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok)
+        buttons.setCenterButtons(True)
         buttons.accepted.connect(self.accept)
         layout.addWidget(buttons)
