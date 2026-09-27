@@ -64,6 +64,23 @@ def test_color_applies_alpha():
     assert c.alpha() == 128
 
 
+def test_every_theme_icon_used_in_src_exists(qapp):
+    from pathlib import Path
+
+    from myphotoworks.ui.styles import theme_icon
+
+    src = Path(__file__).parents[1] / "src" / "myphotoworks"
+    names = {
+        m for f in src.rglob("*.py")
+        for m in re.findall(r'theme_icon\("([^"]+)"\)', f.read_text(encoding="utf-8"))
+    }
+    assert names  # guards the regex itself
+    styles = src / "ui" / "styles"
+    for name in names:
+        assert (styles / f"{name}.svg").is_file(), name
+        assert not theme_icon(name).isNull(), name
+
+
 def test_build_palette_uses_tokens(qapp):
     from PyQt6.QtGui import QPalette
 

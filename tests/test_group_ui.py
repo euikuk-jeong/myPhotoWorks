@@ -184,6 +184,24 @@ def test_adding_photos_keeps_session_and_adds_ungrouped_singles(window, qtbot, t
     assert window._session.added_count() == 0
 
 
+def test_rerun_while_previous_thread_is_exiting_is_not_ignored(window, qtbot):
+    """done re-enables '다시 그룹핑' before the old thread's finished arrives."""
+    run_grouping(window, qtbot)
+    first = window._session
+
+    class _Exiting:  # the old worker: done already emitted, thread not yet reaped
+        waited = False
+
+        def wait(self):
+            _Exiting.waited = True
+
+    window._group_worker = _Exiting()
+    window._on_group_run()
+    assert _Exiting.waited
+    qtbot.waitUntil(lambda: window._session is not None and window._session is not first,
+                    timeout=15000)
+
+
 def test_removing_photos_keeps_groups_and_undo_is_cleared(window, qtbot):
     run_grouping(window, qtbot)
     session = window._session

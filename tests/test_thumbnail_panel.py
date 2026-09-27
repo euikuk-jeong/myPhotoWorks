@@ -42,6 +42,28 @@ def _loaded_panel(qtbot, tmp_path, size=(600, 400)):
     return panel
 
 
+def test_load_box_scales_with_device_pixel_ratio(qtbot, monkeypatch):
+    from PyQt6.QtCore import QSize
+
+    panel = ThumbnailPanel()
+    qtbot.addWidget(panel)
+    monkeypatch.setattr(panel, "devicePixelRatioF", lambda: 1.5)
+    assert panel._load_box() == QSize(252, 168)
+
+
+def test_current_size_loaded_fires_for_selected_photo(qtbot, tmp_path):
+    p = tmp_path / "a.jpg"
+    Image.new("RGB", (900, 600)).save(p)
+    panel = ThumbnailPanel()
+    qtbot.addWidget(panel)
+    panel.show()
+    with qtbot.waitSignal(panel.current_size_loaded, timeout=5000) as sig:
+        panel.add_photos([p])
+        panel.setCurrentRow(0)
+    assert sig.args[0] is panel.all_photos()[0]
+    assert panel.image_size(sig.args[0]) == (900, 600)
+
+
 def test_image_size_cached_from_loader(qtbot, tmp_path):
     panel = _loaded_panel(qtbot, tmp_path, size=(1200, 800))
     assert panel.image_size(panel.all_photos()[0]) == (1200, 800)
