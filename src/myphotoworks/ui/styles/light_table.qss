@@ -208,20 +208,24 @@ QPushButton[text="..."] {
 QGroupBox {
     background: transparent;
     border: none;
-    border-top: 1px solid @line;
-    margin-top: 20px;
-    padding: 12px 0 0 0;
+    margin: 0;
+    padding: 0;
 }
 
-QGroupBox::title {
-    subcontrol-origin: margin;
-    subcontrol-position: top left;
-    left: 0px;
-    top: 0px;
-    padding: 0;
+/* Section header band (ui/section.py): full-width, folds the section on click */
+QToolButton#sectionHeader {
+    background: @sunken;
     color: @text_strong;
-    font-size: 10.5pt;
+    border: none;
+    border-radius: 5px;
+    padding: 5px 10px;
+    font-size: 10pt;
     font-weight: 600;
+    text-align: left;
+}
+
+QToolButton#sectionHeader:hover {
+    background: @raised;
 }
 
 /* ------------------------------------------------------------
@@ -378,14 +382,6 @@ QSpinBox::up-arrow:disabled,
 QDoubleSpinBox::down-arrow:disabled,
 QSpinBox::down-arrow:disabled {
     image: none;
-}
-
-/* Correction / film recipe picker: the main choice on the correction tab */
-QComboBox#recipeCombo {
-    min-height: 32px;
-    padding: 6px 10px;
-    font-size: 10.5pt;
-    font-weight: 500;
 }
 
 QComboBox::drop-down {
@@ -753,6 +749,23 @@ QWidget#statusStrip {
 QWidget#statusStrip QLabel {
     color: @text_muted;
     font-size: 9pt;
+}
+
+/* EXIF overlay (painted translucent in exif_panel.py): keep its inner areas clear */
+QScrollArea#exifScroll,
+QScrollArea#exifScroll > QWidget,
+QWidget#exifBody {
+    background: transparent;
+}
+
+QToolButton#exifClose {
+    color: @text_muted;
+    font-size: 14pt;
+    padding: 0 6px;
+}
+
+QToolButton#exifClose:hover {
+    color: @text_strong;
 }
 
 /* Preview window bottom action bar */

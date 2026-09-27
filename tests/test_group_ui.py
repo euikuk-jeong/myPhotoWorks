@@ -130,16 +130,40 @@ def test_moving_one_weight_slider_moves_the_others(qtbot):
     assert [lbl.text() for lbl in tab._w_labels] == ["10%", "54%", "36%"]
 
 
-def test_settings_panel_section_titles_are_bracketed(qtbot):
-    from PyQt6.QtWidgets import QGroupBox
+def test_settings_panel_sections_have_header_bands(qtbot):
+    from PyQt6.QtWidgets import QToolButton
 
+    from myphotoworks.ui.section import HEADER_H, Section
     from myphotoworks.ui.settings_panel import SettingsPanel
 
     panel = SettingsPanel(AppSettings())
     qtbot.addWidget(panel)
-    titles = [b.title() for b in panel.findChildren(QGroupBox)]
-    assert "[보정 방식]" in titles and "[그룹핑 설정]" in titles
-    assert all(t.startswith("[") and t.endswith("]") for t in titles)
+    sections = panel.findChildren(Section)
+    titles = [s.title() for s in sections]
+    assert "보정 방식" in titles and "그룹핑 설정" in titles
+    for s in sections:
+        header = s.findChild(QToolButton, "sectionHeader")
+        assert header.text() == s.title()
+        assert s.layout().contentsMargins().top() > HEADER_H   # content starts below the band
+
+
+def test_section_fold_restores_only_previously_visible_content(qtbot):
+    from PyQt6.QtWidgets import QLabel, QVBoxLayout
+
+    from myphotoworks.ui.section import Section
+
+    s = Section("테스트")
+    qtbot.addWidget(s)
+    layout = QVBoxLayout(s)
+    shown, hidden = QLabel("a"), QLabel("b")
+    layout.addWidget(shown)
+    layout.addWidget(hidden)
+    hidden.setVisible(False)          # hidden on purpose (like a progress bar)
+    s.show()
+    s.set_expanded(False)
+    assert not shown.isVisible() and not s.is_expanded()
+    s.set_expanded(True)
+    assert shown.isVisible() and not hidden.isVisible()
 
 
 def test_review_page_keys_step_groups_and_toolbar_shows_adopted(qtbot, tmp_path):
