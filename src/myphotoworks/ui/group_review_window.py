@@ -4,9 +4,20 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from PyQt6.QtCore import QObject, QRect, QRunnable, QSize, Qt, QThreadPool, QTimer, pyqtSignal
+from PyQt6.QtCore import (
+    QObject,
+    QRect,
+    QRectF,
+    QRunnable,
+    QSize,
+    Qt,
+    QThreadPool,
+    QTimer,
+    pyqtSignal,
+)
 from PyQt6.QtGui import (
     QColor,
+    QFont,
     QIcon,
     QImage,
     QKeySequence,
@@ -152,15 +163,15 @@ class _GroupDelegate(QStyledItemDelegate):
         if s is None:
             super().paint(painter, option, index)
             return
-        r = option.rect.adjusted(3, 2, -3, -2)
+        r = option.rect.adjusted(0, 2, -2, -2)
         selected = bool(option.state & QStyle.StateFlag.State_Selected)
         hover = bool(option.state & QStyle.StateFlag.State_MouseOver)
         painter.save()
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        painter.setPen(QPen(QColor(tokens.TEXT_MUTED), 1) if selected else Qt.PenStyle.NoPen)
-        painter.setBrush(QColor(tokens.RAISED) if selected
-                         else QColor(tokens.DIVIDER if hover else tokens.PANEL))
-        painter.drawRoundedRect(r, 6, 6)
+        if selected or hover:
+            painter.setPen(QPen(QColor(tokens.TEXT_MUTED), 1) if selected else Qt.PenStyle.NoPen)
+            painter.setBrush(QColor(tokens.RAISED if selected else tokens.DIVIDER))
+            painter.drawRoundedRect(QRectF(r).adjusted(0.5, 0.5, -0.5, -0.5), 6, 6)
 
         thumb = QRect(r.left() + 6, r.top() + (r.height() - GROUP_THUMB) // 2,
                       GROUP_THUMB, GROUP_THUMB)
@@ -174,20 +185,25 @@ class _GroupDelegate(QStyledItemDelegate):
         line_h = (r.height() - 8) // 3
         top = r.top() + 4
 
+        # review tag: a coloured dot + muted text, quieter than a filled pill
         base = painter.font()
         tag_font = painter.font()
-        tag_font.setPointSizeF(base.pointSizeF() * 0.85)
+        tag_font.setPointSizeF(base.pointSizeF() * 0.9)
         painter.setFont(tag_font)
-        tag_w = painter.fontMetrics().horizontalAdvance(s.tag) + 12
-        badge = QRect(right - tag_w, top + 1, tag_w, line_h - 2)
+        tag_w = painter.fontMetrics().horizontalAdvance(s.tag)
+        tag_rect = QRect(right - tag_w, top, tag_w, line_h)
+        painter.setPen(QColor(tokens.TEXT_MUTED))
+        painter.drawText(tag_rect, Qt.AlignmentFlag.AlignVCenter, s.tag)
+        dot = 6
+        painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(_TAG_COLORS.get(s.tag, QColor(tokens.TEXT_MUTED)))
-        painter.drawRoundedRect(badge, 4, 4)
-        painter.setPen(QColor(tokens.ON_PRIMARY))
-        painter.drawText(badge, Qt.AlignmentFlag.AlignCenter, s.tag)
+        painter.drawEllipse(QRect(tag_rect.left() - dot - 5, tag_rect.center().y() - dot // 2,
+                                  dot, dot))
+        badge = tag_rect.adjusted(-dot - 5, 0, 0, 0)
 
         title = painter.font()
         title.setPointSizeF(base.pointSizeF())
-        title.setBold(True)
+        title.setWeight(QFont.Weight.DemiBold)
         painter.setFont(title)
         painter.setPen(QColor(tokens.TEXT_STRONG))
         painter.drawText(QRect(x, top, badge.left() - x - 4, line_h),
@@ -339,63 +355,113 @@ class GroupReviewWindow(QWidget):
 
     def _build(self) -> None:
         root = QVBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(0)
+        root.addWidget(self._build_toolbar())
+
         body = QHBoxLayout()
+        body.setContentsMargins(0, 0, 0, 0)
+        body.setSpacing(0)
+        body.addWidget(self._build_group_panel())
+        body.addWidget(self._build_workspace(), 1)
+        body.addWidget(self._build_score_panel())
         root.addLayout(body, 1)
 
-        left = QVBoxLayout()
-        left.addWidget(QLabel("그룹 목록"))
+        status = QWidget()
+        status.setObjectName("statusStrip")  # styled like a status bar in light_table.qss
+        status.setFixedHeight(28)
+        sl = QHBoxLayout(status)
+        sl.setContentsMargins(16, 0, 16, 0)
+        sl.addWidget(QLabel("← → 사진 이동      Space 채택 토글      Ctrl+Z 되돌리기"))
+        sl.addStretch()
+        self._recent = QLabel("최근 작업: 없음")
+        sl.addWidget(self._recent)
+        root.addWidget(status)
+
+        QShortcut(QKeySequence("Ctrl+Z"), self, activated=self._undo)
+
+    def _build_toolbar(self) -> QWidget:
+        toolbar = QWidget()
+        toolbar.setObjectName("toolbar")  # same band as the main window toolbar
+        toolbar.setFixedHeight(52)
+        bar = QHBoxLayout(toolbar)
+        bar.setContentsMargins(16, 0, 16, 0)
+        bar.setSpacing(6)
+
+        self._title_label = QLabel()
+        self._title_label.setObjectName("viewTitle")
+        bar.addWidget(self._title_label)
+        bar.addSpacing(20)
+
+        def button(text: str, slot, role: str = "") -> QPushButton:
+            btn = QPushButton(text)
+            btn.setFixedHeight(32)
+            if role:
+                btn.setProperty(role, True)
+            btn.clicked.connect(slot)
+            bar.addWidget(btn)
+            return btn
+
+        self._btn_all = button(
+            "전체 채택", lambda: self._batch(self._session.adopt_all, "전체 채택"))
+        self._btn_none = button(
+            "전체 해제", lambda: self._batch(self._session.clear_all, "전체 해제"))
+        self._btn_rec = button(
+            "추천만 채택", lambda: self._batch(self._session.adopt_recommended, "추천만 채택"))
+        self._btn_undo = button("되돌리기", self._undo, role="quiet")
+
+        bar.addStretch()
+        self._export_btn = button("", self._export, role="primary")
+        button("닫기", self.close)
+        return toolbar
+
+    def _build_group_panel(self) -> QWidget:
+        panel = QWidget()
+        panel.setProperty("side", "left")  # panel surface + edge in light_table.qss
+        panel.setFixedWidth(280)
+        left = QVBoxLayout(panel)
+        left.setContentsMargins(12, 14, 12, 12)
+        left.setSpacing(8)
+
+        left.addWidget(self._section_title("그룹"))
         self._group_list = _GroupList()
-        self._group_list.setFixedWidth(260)
+        self._group_list.setObjectName("groupList")
         self._group_list.setItemDelegate(_GroupDelegate(self._group_list, self._icon))
         self._group_list.currentItemChanged.connect(self._on_group_item)
         self._group_list.photo_dropped.connect(self._on_drop_to_group)
         left.addWidget(self._group_list, 1)
-        left.addWidget(QLabel("그룹 수정 (현재 그룹)"))
+
+        left.addSpacing(6)
+        left.addWidget(self._section_title("현재 그룹 수정"))
         self._merge_up = QPushButton("위 그룹과 병합")
         self._merge_down = QPushButton("아래 그룹과 병합")
-        self._split_btn = QPushButton("선택 사진부터 새 그룹으로 분리")
+        self._split_btn = QPushButton("선택한 사진부터 새 그룹으로 분리")
         self._merge_up.clicked.connect(lambda: self._merge(-1))
         self._merge_down.clicked.connect(lambda: self._merge(1))
         self._split_btn.clicked.connect(self._split)
         for b in (self._merge_up, self._merge_down, self._split_btn):
+            b.setFixedHeight(30)
             left.addWidget(b)
-        body.addLayout(left)
+        return panel
 
-        right = QVBoxLayout()
+    def _build_workspace(self) -> QWidget:
+        workspace = QWidget()
+        layout = QVBoxLayout(workspace)
+        layout.setContentsMargins(16, 14, 16, 8)
+        layout.setSpacing(0)
+
         upper = QWidget()
         upper_layout = QVBoxLayout(upper)
-        upper_layout.setContentsMargins(0, 0, 0, 0)
-        top = QHBoxLayout()
+        upper_layout.setContentsMargins(0, 0, 0, 8)
+        upper_layout.setSpacing(6)
         self._preview = ZoomPanView()
         self._preview.detail_requested.connect(self._request_detail)
-        top.addWidget(self._preview, 1)
-
-        score_box = QVBoxLayout()
-        self._score_title = QLabel("품질 점수")
-        score_box.addWidget(self._score_title)
-        self._bars: list[QProgressBar] = []
-        for name in ("선명도", "노출", "색감"):
-            score_box.addWidget(QLabel(name))
-            bar = QProgressBar()
-            bar.setRange(0, 100)
-            bar.setFormat("%v")
-            score_box.addWidget(bar)
-            self._bars.append(bar)
-        self._total_label = QLabel()
-        self._weights_label = QLabel()
-        score_box.addWidget(self._total_label)
-        score_box.addWidget(self._weights_label)
-        score_box.addStretch()
-        score_w = QWidget()
-        score_w.setLayout(score_box)
-        score_w.setFixedWidth(230)
-        top.addWidget(score_w)
-        upper_layout.addLayout(top, 1)
-
+        upper_layout.addWidget(self._preview, 1)
         self._reason_label = QLabel()
         self._reason_label.setWordWrap(True)
         upper_layout.addWidget(self._reason_label)
         self._group_info = QLabel()
+        self._group_info.setObjectName("hint-label")
         upper_layout.addWidget(self._group_info)
 
         self._strip = _Strip()
@@ -410,37 +476,62 @@ class GroupReviewWindow(QWidget):
         self._splitter.setStretchFactor(1, 0)
         # one full row plus a peek of the next, so it is obvious the list scrolls
         self._splitter.setSizes([420, int(STRIP_ROW_HEIGHT * 1.4)])
-        right.addWidget(self._splitter, 1)
+        layout.addWidget(self._splitter, 1)
+        return workspace
 
-        self._recent = QLabel("최근 작업: 없음")
-        right.addWidget(self._recent)
-        body.addLayout(right, 1)
+    def _build_score_panel(self) -> QWidget:
+        panel = QWidget()
+        panel.setProperty("side", "right")
+        panel.setFixedWidth(240)
+        box = QVBoxLayout(panel)
+        box.setContentsMargins(18, 14, 18, 14)
+        box.setSpacing(6)
 
-        bar = QHBoxLayout()
-        bar.addWidget(QLabel("현재 그룹:"))
-        self._btn_all = QPushButton("전체 채택")
-        self._btn_none = QPushButton("전체 해제")
-        self._btn_rec = QPushButton("추천만 채택")
-        self._btn_undo = QPushButton("되돌리기")
-        self._btn_all.clicked.connect(lambda: self._batch(self._session.adopt_all, "전체 채택"))
-        self._btn_none.clicked.connect(lambda: self._batch(self._session.clear_all, "전체 해제"))
-        self._btn_rec.clicked.connect(
-            lambda: self._batch(self._session.adopt_recommended, "추천만 채택")
-        )
-        self._btn_undo.clicked.connect(self._undo)
-        for b in (self._btn_all, self._btn_none, self._btn_rec, self._btn_undo):
-            bar.addWidget(b)
-        bar.addWidget(QLabel("← → 이동 · Space 채택 토글 · Ctrl+Z 되돌리기"))
-        bar.addStretch()
-        self._export_btn = QPushButton()
-        self._export_btn.clicked.connect(self._export)
-        close_btn = QPushButton("닫기")
-        close_btn.clicked.connect(self.close)
-        bar.addWidget(self._export_btn)
-        bar.addWidget(close_btn)
-        root.addLayout(bar)
+        box.addWidget(self._section_title("품질 점수"))
+        self._score_title = QLabel()
+        self._score_title.setObjectName("scoreFile")
+        box.addWidget(self._score_title)
 
-        QShortcut(QKeySequence("Ctrl+Z"), self, activated=self._undo)
+        total_row = QHBoxLayout()
+        self._total_label = QLabel()
+        self._total_label.setObjectName("scoreTotal")
+        total_row.addWidget(self._total_label)
+        caption = QLabel("종합")
+        caption.setObjectName("hint-label")
+        total_row.addWidget(caption, 0, Qt.AlignmentFlag.AlignBottom)
+        total_row.addStretch()
+        box.addLayout(total_row)
+        box.addSpacing(8)
+
+        self._bars: list[QProgressBar] = []
+        self._bar_values: list[QLabel] = []
+        for name in ("선명도", "노출", "색감"):
+            row = QHBoxLayout()
+            row.addWidget(QLabel(name))
+            row.addStretch()
+            value = QLabel()
+            row.addWidget(value)
+            box.addLayout(row)
+            bar = QProgressBar()
+            bar.setRange(0, 100)
+            bar.setTextVisible(False)
+            box.addWidget(bar)
+            box.addSpacing(6)
+            self._bars.append(bar)
+            self._bar_values.append(value)
+
+        self._weights_label = QLabel()
+        self._weights_label.setObjectName("hint-label")
+        self._weights_label.setWordWrap(True)
+        box.addWidget(self._weights_label)
+        box.addStretch()
+        return panel
+
+    @staticmethod
+    def _section_title(text: str) -> QLabel:
+        label = QLabel(text)
+        label.setObjectName("sectionTitle")
+        return label
 
     # ---------------------------------------------------------------- reload
 
@@ -458,6 +549,7 @@ class GroupReviewWindow(QWidget):
         self._fill_strip()
         self._update_side_widgets()
         pos = ids.index(self._gid) + 1 if self._gid in ids else 0
+        self._title_label.setText(f"그룹 {pos:,} / {len(ids):,}")
         self.setWindowTitle(
             f"그룹 리뷰 — 그룹 {pos:,} / {len(ids):,}"
             f" · 채택 {self._session.adopted_count():,}장"
@@ -559,25 +651,29 @@ class GroupReviewWindow(QWidget):
                 self._preview.set_detail(key, self._details[key])
         state = "채택" if photo.is_adopted else "제외"
         star = " · 추천" if photo.is_recommended else ""
-        self._score_title.setText(f"품질 점수 · {photo.source_path.name}")
+        self._score_title.setText(photo.source_path.name)
         if photo.scores is not None:
-            for bar, v in zip(self._bars, (photo.scores.sharpness, photo.scores.exposure,
-                                           photo.scores.color), strict=True):
+            values = (photo.scores.sharpness, photo.scores.exposure, photo.scores.color)
+            for bar, label, v in zip(self._bars, self._bar_values, values, strict=True):
                 bar.setValue(round(v))
+                label.setText(str(round(v)))
             w = self._settings.weights()
-            self._total_label.setText(f"종합 {round(composite(photo.scores, w))}")
-            self._weights_label.setText(f"가중치 {w[0]:.2f} / {w[1]:.2f} / {w[2]:.2f}")
+            self._total_label.setText(str(round(composite(photo.scores, w))))
+            self._weights_label.setText(
+                f"가중치: 선명도 {w[0]:.0%}, 노출 {w[1]:.0%}, 색감 {w[2]:.0%}"
+            )
         else:
-            for bar in self._bars:
+            for bar, label in zip(self._bars, self._bar_values, strict=True):
                 bar.setValue(0)
-            self._total_label.setText("종합 -")
+                label.setText("-")
+            self._total_label.setText("-")
             self._weights_label.setText("분석하지 못한 사진입니다")
         rec = next((p for p in self._session.group(photo.group_id).photos if p.is_recommended),
                    None)
         reason = f"[{state}{star}] {photo.reason or '-'}"
         if rec is not None and rec is not photo:
             reason += f"   · 추천: {rec.source_path.name} ({rec.reason})"
-        self._reason_label.setText("추천 이유  " + reason)
+        self._reason_label.setText(reason)
 
     def _update_side_widgets(self) -> None:
         ids = [g.id for g in self._session.groups()]
@@ -594,8 +690,8 @@ class GroupReviewWindow(QWidget):
             span = f" · {span}" if span else ""
             adopted = sum(1 for p in g.photos if p.is_adopted)
             self._group_info.setText(
-                f"{len(g.photos):,}장{span} · 채택 {adopted:,}장 · 우클릭: 그룹 수정 · "
-                "그룹 목록으로 드래그해도 이동"
+                f"{len(g.photos):,}장{span} · 채택 {adopted:,}장      "
+                "사진을 우클릭하거나 그룹 목록으로 끌어 옮길 수 있어요"
             )
 
     # ---------------------------------------------------------------- events

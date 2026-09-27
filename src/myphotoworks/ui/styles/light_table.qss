@@ -680,6 +680,55 @@ QPushButton#delete-btn:hover {
     color: @text_strong;
 }
 
+/* Side panels next to a photo workspace (property side="left" / "right") */
+QWidget[side="left"] {
+    background: @panel;
+    border-right: 1px solid @edge;
+}
+
+QWidget[side="right"] {
+    background: @panel;
+    border-left: 1px solid @edge;
+}
+
+QLabel#sectionTitle {
+    color: @text_muted;
+    font-size: 9pt;
+    font-weight: 500;
+}
+
+QLabel#viewTitle {
+    color: @text_strong;
+    font-size: 11pt;
+    font-weight: 600;
+}
+
+QLabel#scoreFile {
+    color: @text_strong;
+    font-weight: 500;
+}
+
+QLabel#scoreTotal {
+    color: @text_strong;
+    font-size: 22pt;
+    font-weight: 600;
+}
+
+QListWidget#groupList {
+    background: transparent;
+}
+
+/* Bottom strip of plain windows (QWidget), styled like QStatusBar */
+QWidget#statusStrip {
+    background: @panel;
+    border-top: 1px solid @edge;
+}
+
+QWidget#statusStrip QLabel {
+    color: @text_muted;
+    font-size: 9pt;
+}
+
 /* Preview window bottom action bar */
 QWidget#preview-action-bar {
     background: @panel;

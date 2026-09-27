@@ -89,9 +89,10 @@ class GroupTab(QWidget):
 
     def _build(self) -> None:
         root = QVBoxLayout(self)
-        root.setContentsMargins(8, 4, 8, 8)
+        root.setContentsMargins(14, 8, 14, 12)
         root.setSpacing(6)
-        self._guide_btn = QPushButton("알고리즘 설명서 보기 (그림으로 쉽게 이해하기)")
+        self._guide_btn = QPushButton("그룹핑·추천 원리 설명서 열기")
+        self._guide_btn.setProperty("quiet", True)
         self._guide_btn.setToolTip(
             "사진을 어떻게 묶고 추천하는지 그림과 예제로 설명한 문서를 브라우저에서 엽니다."
         )

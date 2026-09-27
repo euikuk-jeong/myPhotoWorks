@@ -498,6 +498,18 @@ def test_review_few_photos_need_no_scrollbar_and_splitter_is_resizable(qtbot, tm
     assert win._splitter.sizes()[1] > before[1]
 
 
+def test_review_toolbar_title_and_score_panel(qtbot, tmp_path):
+    win, _photos = _big_group_review(qtbot, tmp_path, n=6)
+    assert win._title_label.text() == "그룹 1 / 1"
+    assert win._export_btn.property("primary") is True
+    photo = win._strip.current_photo()
+    assert win._score_title.text() == photo.source_path.name
+    assert [lbl.text() for lbl in win._bar_values] == [
+        str(round(v)) for v in (photo.scores.sharpness, photo.scores.exposure, photo.scores.color)
+    ]
+    assert win._total_label.text().isdigit()
+
+
 def test_review_toggle_in_scrolled_strip_keeps_scroll_position(qtbot, tmp_path):
     win, photos = _big_group_review(qtbot, tmp_path)
     strip = win._strip
