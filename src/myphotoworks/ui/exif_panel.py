@@ -67,7 +67,7 @@ class ExifPanel(QDialog):
         rows: list[tuple[str, str]] = []
 
         if index > 0:
-            rows.append(("번호", f"{index} / {total}"))
+            rows.append(("번호", f"{index:,} / {total:,}"))
 
         rows += [
             ("파일이름",   exif["filename"]),

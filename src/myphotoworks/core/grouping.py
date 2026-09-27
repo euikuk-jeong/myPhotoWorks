@@ -96,10 +96,10 @@ def judge_time_trust(times: list[datetime | None]) -> TimeTrust:
     if n == 0 or len(have) < 2:
         return TimeTrust(False, "촬영 시각이 있는 사진이 부족합니다")
     if len(have) / n < MIN_TIME_COVERAGE:
-        return TimeTrust(False, f"{n}장 중 {len(have)}장만 촬영 시각이 있습니다")
+        return TimeTrust(False, f"{n:,}장 중 {len(have):,}장만 촬영 시각이 있습니다")
     biggest = Counter(have).most_common(1)[0][1]
     if len(set(have)) < 2 or biggest / len(have) > MAX_SAME_TIME_RATIO:
-        return TimeTrust(False, f"{len(have)}장 중 {biggest}장이 같은 시각입니다")
+        return TimeTrust(False, f"{len(have):,}장 중 {biggest:,}장이 같은 시각입니다")
     return TimeTrust(True)
 
 

@@ -18,6 +18,7 @@ a = Analysis(
         (str(src_dir / "myphotoworks" / "recipes" / "fuji_fp1"), "myphotoworks/recipes/fuji_fp1"),
     ],
     hiddenimports=[
+        "PyQt6.QtSvg",  # qsvg image plugin for the theme's SVG icons (QSS url())
         "myphotoworks",
         "myphotoworks.ui",
         "myphotoworks.ui.main_window",

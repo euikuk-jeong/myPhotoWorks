@@ -5,6 +5,8 @@ from PyQt6.QtCore import QPointF, QRectF, Qt, pyqtSignal
 from PyQt6.QtGui import QColor, QFont, QPainter, QPixmap, QWheelEvent
 from PyQt6.QtWidgets import QWidget
 
+from myphotoworks.ui.styles import tokens
+
 ZOOM_STEP = 1.15
 MAX_ZOOM = 8.0            # relative to the logical image size (see set_image)
 DETAIL_TRIGGER = 1.05     # ask for a sharper image once zoomed past fit * this
@@ -30,7 +32,7 @@ class ZoomPanView(QWidget):
         self.setCursor(Qt.CursorShape.OpenHandCursor)
         self.setAutoFillBackground(True)
         palette = self.palette()
-        palette.setColor(palette.ColorRole.Window, QColor(13, 17, 23))
+        palette.setColor(palette.ColorRole.Window, QColor(tokens.GROUND))
         self.setPalette(palette)
 
         self._key: str | None = None
@@ -139,7 +141,7 @@ class ZoomPanView(QWidget):
         painter = QPainter(self)
         if self._pixmap is None:
             if self._message:
-                painter.setPen(QColor(139, 148, 158))
+                painter.setPen(QColor(tokens.TEXT_MUTED))
                 painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, self._message)
             return
         painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
@@ -151,9 +153,9 @@ class ZoomPanView(QWidget):
         font = QFont(painter.font())
         font.setPointSize(8)
         painter.setFont(font)
-        painter.setPen(QColor(230, 237, 243, 210))
+        painter.setPen(QColor(tokens.TEXT))
         painter.fillRect(QRectF(6, self.height() - 24, self.width() - 12, 18),
-                         QColor(13, 17, 23, 150))
+                         tokens.color(tokens.PANEL, 190))
         painter.drawText(QRectF(12, self.height() - 24, self.width() - 24, 18),
                          Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
                          f"{text}   {hint}")

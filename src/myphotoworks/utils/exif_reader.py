@@ -111,7 +111,7 @@ def read_exif(path: Path) -> dict[str, str]:
     try:
         from PIL import Image
         with Image.open(path) as img:
-            result["size"] = f"{img.width} x {img.height}"
+            result["size"] = f"{img.width:,} x {img.height:,}"
     except Exception:
         pass
 

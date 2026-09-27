@@ -1,16 +1,17 @@
 """GroupReviewWindow — compare photos per group, adopt several, edit groups, undo."""
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 
-from PyQt6.QtCore import QObject, QRunnable, QSize, Qt, QThreadPool, QTimer, pyqtSignal
+from PyQt6.QtCore import QObject, QRect, QRunnable, QSize, Qt, QThreadPool, QTimer, pyqtSignal
 from PyQt6.QtGui import (
     QColor,
     QIcon,
     QImage,
     QKeySequence,
-    QLinearGradient,
     QPainter,
+    QPen,
     QPixmap,
     QShortcut,
 )
@@ -25,17 +26,31 @@ from PyQt6.QtWidgets import (
     QProgressBar,
     QPushButton,
     QSplitter,
+    QStyle,
+    QStyledItemDelegate,
     QVBoxLayout,
     QWidget,
 )
 
 from myphotoworks.core.analysis_image import load_analysis_image
 from myphotoworks.core.scoring import composite
-from myphotoworks.models.group_session import GroupSession
+from myphotoworks.models.group_session import (
+    TAG_EDITED,
+    TAG_REVIEWED,
+    TAG_TODO,
+    Group,
+    GroupSession,
+)
 from myphotoworks.models.photo_item import PhotoItem
 from myphotoworks.models.settings import AppSettings
 from myphotoworks.processing.export import export_adopted
-from myphotoworks.ui.thumbnail_panel import _PHOTO_ROLE, _CardDelegate, checkbox_rect
+from myphotoworks.ui.styles import tokens
+from myphotoworks.ui.thumbnail_panel import (
+    _PHOTO_ROLE,
+    _STAR,
+    _CardDelegate,
+    checkbox_rect,
+)
 from myphotoworks.ui.zoom_view import ZoomPanView
 
 STRIP_ICON = 130
@@ -43,6 +58,49 @@ STRIP_ROW_HEIGHT = STRIP_ICON + 52   # one row of cards incl. name and padding
 PREVIEW_LONG_SIDE = 1000   # fitted preview
 DETAIL_LONG_SIDE = 4000    # loaded on first zoom-in so detail is not blurry
 DETAIL_CACHE = 3
+GROUP_THUMB = 56
+GROUP_ROW_HEIGHT = GROUP_THUMB + 16
+GROUP_MAX_DOTS = 8         # adoption dots per card; bigger groups show only the count
+_SUMMARY_ROLE = Qt.ItemDataRole.UserRole + 1
+_TAG_COLORS = {TAG_TODO: QColor(tokens.WARN), TAG_REVIEWED: QColor(tokens.OK),
+               TAG_EDITED: QColor(tokens.PRIMARY)}
+
+
+def time_span(photos: list[PhotoItem]) -> str:
+    """'HH:MM:SS' or 'HH:MM:SS – HH:MM:SS' of the capture times, '' when none are known."""
+    times = sorted(p.analysis.taken for p in photos if p.analysis and p.analysis.taken)
+    if not times:
+        return ""
+    a, b = times[0].strftime("%H:%M:%S"), times[-1].strftime("%H:%M:%S")
+    return a if a == b else f"{a} – {b}"
+
+
+@dataclass(frozen=True)
+class GroupSummary:
+    """What one card of the group list shows."""
+
+    number: int
+    count: int
+    adopted: int
+    span: str
+    tag: str
+    cover: PhotoItem   # recommended photo, else the first one
+
+    @property
+    def text(self) -> str:
+        return f"그룹 {self.number:,} · {self.count:,}장 · 채택 {self.adopted:,}  [{self.tag}]"
+
+
+def group_summary(session: GroupSession, group: Group, number: int) -> GroupSummary:
+    cover = next((p for p in group.photos if p.is_recommended), group.photos[0])
+    return GroupSummary(
+        number=number,
+        count=len(group.photos),
+        adopted=sum(1 for p in group.photos if p.is_adopted),
+        span=time_span(group.photos),
+        tag=session.tag(group.id),
+        cover=cover,
+    )
 
 
 def _pil_to_qimage(img) -> QImage:
@@ -77,6 +135,85 @@ class _DetailLoader(QRunnable):
         self._signals.loaded.emit(str(self._path), image)
 
 
+class _GroupDelegate(QStyledItemDelegate):
+    """Paints a group card: cover thumbnail, title, review tag, size/time and adoption dots."""
+
+    def __init__(self, parent, thumb) -> None:
+        super().__init__(parent)
+        self._thumb = thumb  # PhotoItem -> QIcon, loaded lazily for visible cards only
+
+    def sizeHint(self, option, index) -> QSize:  # noqa: N802
+        return QSize(option.rect.width(), GROUP_ROW_HEIGHT)
+
+    def paint(self, painter: QPainter, option, index) -> None:
+        s: GroupSummary | None = index.data(_SUMMARY_ROLE)
+        if s is None:
+            super().paint(painter, option, index)
+            return
+        r = option.rect.adjusted(3, 2, -3, -2)
+        selected = bool(option.state & QStyle.StateFlag.State_Selected)
+        hover = bool(option.state & QStyle.StateFlag.State_MouseOver)
+        painter.save()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(QPen(QColor(tokens.TEXT_MUTED), 1) if selected else Qt.PenStyle.NoPen)
+        painter.setBrush(QColor(tokens.RAISED) if selected
+                         else QColor(tokens.DIVIDER if hover else tokens.PANEL))
+        painter.drawRoundedRect(r, 6, 6)
+
+        thumb = QRect(r.left() + 6, r.top() + (r.height() - GROUP_THUMB) // 2,
+                      GROUP_THUMB, GROUP_THUMB)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor(tokens.SUNKEN))
+        painter.drawRoundedRect(thumb, 4, 4)
+        self._thumb(s.cover).paint(painter, thumb)
+
+        x = thumb.right() + 10
+        right = r.right() - 8
+        line_h = (r.height() - 8) // 3
+        top = r.top() + 4
+
+        base = painter.font()
+        tag_font = painter.font()
+        tag_font.setPointSizeF(base.pointSizeF() * 0.85)
+        painter.setFont(tag_font)
+        tag_w = painter.fontMetrics().horizontalAdvance(s.tag) + 12
+        badge = QRect(right - tag_w, top + 1, tag_w, line_h - 2)
+        painter.setBrush(_TAG_COLORS.get(s.tag, QColor(tokens.TEXT_MUTED)))
+        painter.drawRoundedRect(badge, 4, 4)
+        painter.setPen(QColor(tokens.ON_PRIMARY))
+        painter.drawText(badge, Qt.AlignmentFlag.AlignCenter, s.tag)
+
+        title = painter.font()
+        title.setPointSizeF(base.pointSizeF())
+        title.setBold(True)
+        painter.setFont(title)
+        painter.setPen(QColor(tokens.TEXT_STRONG))
+        painter.drawText(QRect(x, top, badge.left() - x - 4, line_h),
+                         Qt.AlignmentFlag.AlignVCenter, f"그룹 {s.number:,}")
+
+        painter.setFont(base)
+        painter.setPen(QColor(tokens.TEXT_MUTED))
+        info = f"{s.count:,}장" + (f" · {s.span}" if s.span else "")
+        info = painter.fontMetrics().elidedText(info, Qt.TextElideMode.ElideRight, right - x)
+        painter.drawText(QRect(x, top + line_h, right - x, line_h),
+                         Qt.AlignmentFlag.AlignVCenter, info)
+
+        adopted = f"채택 {s.adopted:,}/{s.count:,}"
+        row = QRect(x, top + 2 * line_h, right - x, line_h)
+        painter.setPen(QColor(tokens.PICK_TEXT) if s.adopted else QColor(tokens.TEXT_MUTED))
+        painter.drawText(row, Qt.AlignmentFlag.AlignVCenter, adopted)
+        if s.count <= GROUP_MAX_DOTS:
+            d = 7
+            cx = x + painter.fontMetrics().horizontalAdvance(adopted) + 8
+            cy = row.center().y() - d // 2
+            for k in range(s.count):
+                on = k < s.adopted
+                painter.setPen(QPen(_STAR if on else QColor(tokens.TEXT_DISABLED), 1))
+                painter.setBrush(_STAR if on else Qt.BrushStyle.NoBrush)
+                painter.drawEllipse(QRect(cx + k * (d + 3), cy, d, d))
+        painter.restore()
+
+
 class _GroupList(QListWidget):
     """Group list that accepts photo cards dragged from the film strip."""
 
@@ -86,6 +223,8 @@ class _GroupList(QListWidget):
         super().__init__()
         self.setAcceptDrops(True)
         self.setDragDropMode(QListWidget.DragDropMode.DropOnly)
+        self.setVerticalScrollMode(QListWidget.ScrollMode.ScrollPerPixel)
+        self.setMouseTracking(True)
 
     def dragEnterEvent(self, event) -> None:  # noqa: N802
         if isinstance(event.source(), _Strip):
@@ -204,6 +343,7 @@ class GroupReviewWindow(QWidget):
         left.addWidget(QLabel("그룹 목록"))
         self._group_list = _GroupList()
         self._group_list.setFixedWidth(260)
+        self._group_list.setItemDelegate(_GroupDelegate(self._group_list, self._icon))
         self._group_list.currentItemChanged.connect(self._on_group_item)
         self._group_list.photo_dropped.connect(self._on_drop_to_group)
         left.addWidget(self._group_list, 1)
@@ -299,14 +439,6 @@ class GroupReviewWindow(QWidget):
 
         QShortcut(QKeySequence("Ctrl+Z"), self, activated=self._undo)
 
-    def paintEvent(self, event) -> None:  # noqa: N802
-        painter = QPainter(self)
-        gradient = QLinearGradient(0, 0, 0, self.height())
-        gradient.setColorAt(0.0, QColor("#0d1117"))
-        gradient.setColorAt(0.5, QColor("#161b22"))
-        gradient.setColorAt(1.0, QColor("#1c2333"))
-        painter.fillRect(self.rect(), gradient)
-
     # ---------------------------------------------------------------- reload
 
     def refresh(self) -> None:
@@ -319,24 +451,47 @@ class GroupReviewWindow(QWidget):
         ids = [g.id for g in groups]
         if self._gid not in ids:
             self._gid = ids[0] if ids else None
-        self._group_list.blockSignals(True)
-        self._group_list.clear()
-        for k, g in enumerate(groups, start=1):
-            adopted = sum(1 for p in g.photos if p.is_adopted)
-            item = QListWidgetItem(
-                f"그룹 {k} · {len(g.photos)}장 · 채택 {adopted}  [{self._session.tag(g.id)}]"
-            )
-            item.setData(Qt.ItemDataRole.UserRole, g.id)
-            self._group_list.addItem(item)
-            if g.id == self._gid:
-                self._group_list.setCurrentItem(item)
-        self._group_list.blockSignals(False)
+        self._fill_group_list(groups)
         self._fill_strip()
         self._update_side_widgets()
+        pos = ids.index(self._gid) + 1 if self._gid in ids else 0
         self.setWindowTitle(
-            f"그룹 리뷰 — 그룹 {ids.index(self._gid) + 1 if self._gid in ids else 0} / {len(ids)}"
-            f" · 채택 {self._session.adopted_count()}장"
+            f"그룹 리뷰 — 그룹 {pos:,} / {len(ids):,}"
+            f" · 채택 {self._session.adopted_count():,}장"
         )
+
+    def _fill_group_list(self, groups: list[Group]) -> None:
+        """Update the cards in place; rebuild only when groups were added/removed/reordered.
+
+        A rebuild keeps the scroll position, so the selected card does not jump to the edge.
+        """
+        lst = self._group_list
+        ids = [g.id for g in groups]
+        current = [lst.item(i).data(Qt.ItemDataRole.UserRole) for i in range(lst.count())]
+        lst.blockSignals(True)
+        rebuilt = current != ids
+        if rebuilt:
+            pos = lst.verticalScrollBar().value()
+            lst.clear()
+            for gid in ids:
+                item = QListWidgetItem()
+                item.setData(Qt.ItemDataRole.UserRole, gid)
+                lst.addItem(item)
+        for k, g in enumerate(groups):
+            s = group_summary(self._session, g, k + 1)
+            item = lst.item(k)
+            item.setData(_SUMMARY_ROLE, s)
+            item.setText(s.text)
+            item.setToolTip(s.text + (f"\n{s.span}" if s.span else ""))
+            if g.id == self._gid and lst.currentItem() is not item:
+                lst.setCurrentItem(item)
+        if rebuilt:
+            lst.doItemsLayout()
+            lst.verticalScrollBar().setValue(pos)
+            if lst.currentItem() is not None:
+                lst.scrollToItem(lst.currentItem())  # only moves if it went out of view
+        lst.blockSignals(False)
+        lst.viewport().update()
 
     def _fill_strip(self, keep: PhotoItem | None = None) -> None:
         strip = self._strip
@@ -427,18 +582,15 @@ class GroupReviewWindow(QWidget):
         self._merge_down.setEnabled(0 <= k < len(ids) - 1)
         self._btn_undo.setEnabled(self._session.can_undo)
         n = self._session.adopted_count()
-        self._export_btn.setText(f"채택 사진 내보내기 ({n}장)")
+        self._export_btn.setText(f"채택 사진 내보내기 ({n:,}장)")
         self._export_btn.setEnabled(n > 0)
         if self._gid is not None:
             g = self._session.group(self._gid)
-            times = sorted(p.analysis.taken for p in g.photos if p.analysis and p.analysis.taken)
-            span = ""
-            if times:
-                a, b = times[0].strftime("%H:%M:%S"), times[-1].strftime("%H:%M:%S")
-                span = f" · {a}" if a == b else f" · {a} – {b}"
+            span = time_span(g.photos)
+            span = f" · {span}" if span else ""
             adopted = sum(1 for p in g.photos if p.is_adopted)
             self._group_info.setText(
-                f"{len(g.photos)}장{span} · 채택 {adopted}장 · 우클릭: 그룹 수정 · "
+                f"{len(g.photos):,}장{span} · 채택 {adopted:,}장 · 우클릭: 그룹 수정 · "
                 "그룹 목록으로 드래그해도 이동"
             )
 
@@ -511,7 +663,7 @@ class GroupReviewWindow(QWidget):
         targets = {}
         for k, g in enumerate(groups, start=1):
             if g.id != photo.group_id:
-                targets[move.addAction(f"그룹 {k} ({len(g.photos)}장)")] = g.id
+                targets[move.addAction(f"그룹 {k:,} ({len(g.photos):,}장)")] = g.id
         if not targets:
             move.setEnabled(False)
         detach = menu.addAction("그룹에서 분리 (단독 사진)")
@@ -541,9 +693,9 @@ class GroupReviewWindow(QWidget):
         copied, errors = export_adopted(
             [p for g in self._session.groups() for p in g.photos], Path(dest)
         )
-        msg = f"{copied}장을 복사했습니다.\n{dest}"
+        msg = f"{copied:,}장을 복사했습니다.\n{dest}"
         if errors:
-            msg += f"\n\n실패 {len(errors)}건:\n" + "\n".join(errors[:5])
+            msg += f"\n\n실패 {len(errors):,}건:\n" + "\n".join(errors[:5])
         QMessageBox.information(self, "내보내기 완료", msg)
 
     def _request_detail(self, key: str) -> None:
