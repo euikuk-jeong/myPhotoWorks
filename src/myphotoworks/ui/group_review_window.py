@@ -48,6 +48,8 @@ from myphotoworks.ui.styles import tokens
 from myphotoworks.ui.thumbnail_panel import (
     _PHOTO_ROLE,
     _STAR,
+    CARD_PAD,
+    CARD_TEXT_H,
     _CardDelegate,
     checkbox_rect,
 )
@@ -264,6 +266,7 @@ class _Strip(QListWidget):
         self.setMovement(QListWidget.Movement.Static)
         self.setIconSize(QSize(STRIP_ICON, STRIP_ICON))
         self.setSpacing(6)
+        self.setObjectName("thumbGrid")  # card padding in light_table.qss
         self.setMinimumHeight(STRIP_ROW_HEIGHT)
         self.setDragEnabled(True)
         self.setDragDropMode(QListWidget.DragDropMode.DragOnly)
@@ -273,7 +276,6 @@ class _Strip(QListWidget):
         self.setItemDelegate(_CardDelegate(self))
         # duck-typed panel attributes used by _CardDelegate
         self.grouping_active = True
-        self.icon_px = STRIP_ICON
         self.show_score = True
         self.weights = (0.5, 0.3, 0.2)
 
@@ -292,7 +294,8 @@ class _Strip(QListWidget):
             index = self.indexAt(event.position().toPoint())
             if index.isValid():
                 photo = index.data(_PHOTO_ROLE)
-                if checkbox_rect(self.visualRect(index)).contains(event.position().toPoint()):
+                photo_rect = self.itemDelegate().photo_rect(self.visualRect(index), index)
+                if checkbox_rect(photo_rect).contains(event.position().toPoint()):
                     self.adoption_toggle_requested.emit(photo, not photo.is_adopted)
                     return
         super().mousePressEvent(event)
@@ -506,7 +509,8 @@ class GroupReviewWindow(QWidget):
                 item = QListWidgetItem(p.source_path.name)
                 item.setData(_PHOTO_ROLE, p)
                 item.setTextAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignBottom)
-                item.setSizeHint(QSize(STRIP_ICON + 20, STRIP_ICON + 40))
+                item.setSizeHint(QSize(STRIP_ICON + 2 * CARD_PAD,
+                                       STRIP_ICON + CARD_PAD + CARD_TEXT_H + 4))
                 item.setIcon(self._icon(p))
                 item.setToolTip(p.reason)
                 strip.addItem(item)

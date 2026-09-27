@@ -88,6 +88,23 @@ def test_initial_state_no_grouping_controls(window):
     assert window._process_btn.text() == "일괄 적용 (6장)"
 
 
+def test_status_bar_splits_counts_adopted_and_selected_file(window, qtbot):
+    assert window._status_label.text() == "사진 6장"
+    assert window._pick_label.text() == ""
+    run_grouping(window, qtbot)
+    assert window._status_label.text() == "사진 6장, 그룹 4개"
+    assert window._pick_label.text() == "채택 4장"
+    photo = window._thumb_panel.photos()[0]
+    window._show_file(photo)
+    assert window._file_label.text().startswith(photo.source_path.name)
+
+
+def test_toolbar_marks_process_as_primary_and_view_as_segments(window):
+    assert window._process_btn.property("primary") is True
+    assert window._all_view_btn.property("segment") is True
+    assert window._remove_btn.property("quiet") is True
+
+
 def test_group_summary_text_uses_thousands_separator():
     from myphotoworks.ui.group_review_window import GroupSummary
 
@@ -311,7 +328,7 @@ def test_group_tab_has_three_titled_sections(qtbot):
     tab = GroupTab(AppSettings())
     qtbot.addWidget(tab)
     titles = [b.title() for b in tab.findChildren(QGroupBox)]
-    assert titles == ["① 그룹핑 설정", "② 그룹핑 실행 · 결과", "③ 추천 설정"]
+    assert titles == ["그룹핑 설정", "실행과 결과", "추천 설정"]
     # run button and result live in section 2, weights in section 3
     assert tab._run_box.isAncestorOf(tab._run_btn) and tab._run_box.isAncestorOf(tab._review_btn)
     assert tab._recommend_box.isAncestorOf(tab._reset_btn)

@@ -12,14 +12,16 @@ from pathlib import Path
 from PyQt6.QtCore import (
     QObject,
     QPoint,
+    QPointF,
     QRect,
+    QRectF,
     QRunnable,
     QSize,
     Qt,
     QThreadPool,
     pyqtSignal,
 )
-from PyQt6.QtGui import QColor, QIcon, QImage, QPainter, QPen, QPixmap
+from PyQt6.QtGui import QColor, QIcon, QImage, QPainter, QPainterPath, QPen, QPixmap
 from PyQt6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
@@ -31,29 +33,54 @@ from PyQt6.QtWidgets import (
 from myphotoworks.models.photo_item import PhotoItem, ProcessStatus
 from myphotoworks.ui.styles import tokens
 
-THUMBNAIL_SIZE = 80
+THUMB_BOX = QSize(168, 112)   # 3:2 display box; portrait photos fit its height
+CARD_PAD = 12                 # room around the photo for the adoption loop
+CARD_TEXT_H = 22              # filename line under the photo
 SUPPORTED_EXTS = {".jpg", ".jpeg", ".png", ".tif", ".tiff", ".bmp", ".webp"}
 
 _PHOTO_ROLE = Qt.ItemDataRole.UserRole
 _ACCENT = QColor(tokens.PICK)
 _STAR = QColor(tokens.PICK)
+_LOOP_OUTSET = 7              # how far the adoption loop sits outside the photo
 
 
-def checkbox_rect(item_rect: QRect) -> QRect:
-    return QRect(item_rect.right() - 22, item_rect.top() + 4, 18, 18)
+def checkbox_rect(photo_rect: QRect) -> QRect:
+    """Hit/paint area of the adoption checkbox: the photo's top-right corner."""
+    return QRect(photo_rect.right() - 23, photo_rect.top() + 5, 18, 18)
+
+
+def pick_loop_path(photo_rect: QRectF) -> QPainterPath:
+    """A hand-drawn china-marker loop around ``photo_rect`` (stays within the outset).
+
+    The start overshoots slightly past the end, like a real pencil loop.
+    """
+    r = QRectF(photo_rect).adjusted(-_LOOP_OUTSET, -_LOOP_OUTSET, _LOOP_OUTSET, _LOOP_OUTSET)
+    x, y, w, h = r.x(), r.y(), r.width(), r.height()
+
+    def p(fx: float, fy: float) -> QPointF:
+        return QPointF(x + fx * w, y + fy * h)
+
+    path = QPainterPath(p(0.07, 0.10))
+    path.cubicTo(p(0.30, 0.02), p(0.70, 0.00), p(0.95, 0.06))
+    path.cubicTo(p(1.00, 0.30), p(1.00, 0.65), p(0.96, 0.92))
+    path.cubicTo(p(0.70, 1.00), p(0.30, 0.99), p(0.05, 0.93))
+    path.cubicTo(p(0.00, 0.65), p(0.00, 0.33), p(0.04, 0.09))
+    path.cubicTo(p(0.07, 0.04), p(0.12, 0.03), p(0.18, 0.03))
+    return path
 
 
 class _LoaderSignals(QObject):
-    loaded = pyqtSignal(str, QImage)
+    loaded = pyqtSignal(str, QImage, int, int)   # path, thumbnail, original width, height
 
 
 class _ThumbnailLoader(QRunnable):
     """Background runnable that decodes a thumbnail QImage for one photo."""
 
-    def __init__(self, path: Path, signals: _LoaderSignals) -> None:
+    def __init__(self, path: Path, signals: _LoaderSignals, box: QSize) -> None:
         super().__init__()
         self._path = path
         self._signals = signals
+        self._box = (box.width(), box.height())
 
     def run(self) -> None:
         try:
@@ -61,68 +88,101 @@ class _ThumbnailLoader(QRunnable):
 
             with Image.open(self._path) as img:
                 img = ImageOps.exif_transpose(img)
-                img.thumbnail((THUMBNAIL_SIZE, THUMBNAIL_SIZE), Image.Resampling.LANCZOS)
+                width, height = img.size
+                img.thumbnail(self._box, Image.Resampling.LANCZOS)
                 img = img.convert("RGB")
                 data = img.tobytes("raw", "RGB")
                 qimg = QImage(
                     data, img.width, img.height, img.width * 3, QImage.Format.Format_RGB888
                 ).copy()  # detach from the Python buffer
-            self._signals.loaded.emit(str(self._path), qimg)
+            self._signals.loaded.emit(str(self._path), qimg, width, height)
         except Exception:
             pass
 
 
 class _CardDelegate(QStyledItemDelegate):
-    """Paints adoption border, star, checkbox and score badge over a thumbnail card."""
+    """Paints the adoption loop, checkbox, recommendation star and badges over a card.
+
+    Everything is placed relative to the photo's actual rect (portrait photos are
+    narrower than the 3:2 box) and kept inside the item rect, so repaints leave no trails.
+    """
 
     def __init__(self, panel: ThumbnailPanel) -> None:
         super().__init__(panel)
         self._panel = panel
+
+    def photo_rect(self, item_rect: QRect, index) -> QRect:
+        """Rect the thumbnail pixmap actually occupies inside the item.
+
+        Mirrors the ``#thumbGrid::item`` box model (1px border + CARD_PAD top padding,
+        icon box centred horizontally). Computed by hand on purpose: copying the
+        QStyleOptionViewItem in Python and asking the style crashed under GC.
+        """
+        box = self._panel.iconSize()
+        top = item_rect.top() + 1 + CARD_PAD
+        left = item_rect.left() + (item_rect.width() - box.width()) // 2
+        icon = index.data(Qt.ItemDataRole.DecorationRole)
+        size = icon.actualSize(box) if isinstance(icon, QIcon) and not icon.isNull() else box
+        return QRect(
+            left + (box.width() - size.width()) // 2,
+            top + (box.height() - size.height()) // 2,
+            size.width(), size.height(),
+        )
 
     def paint(self, painter: QPainter, option: QStyleOptionViewItem, index) -> None:
         super().paint(painter, option, index)
         photo = index.data(_PHOTO_ROLE)
         if photo is None or not self._panel.grouping_active:
             return
-        r = option.rect
+        r = self.photo_rect(option.rect, index)
         painter.save()
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         if photo.is_adopted:
-            painter.setPen(QPen(_ACCENT, 2))
+            pen = QPen(_ACCENT, 2.4)
+            pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+            painter.setPen(pen)
             painter.setBrush(Qt.BrushStyle.NoBrush)
-            painter.drawRoundedRect(r.adjusted(1, 1, -1, -1), 6, 6)
+            painter.drawPath(pick_loop_path(QRectF(r)))
 
-        box = checkbox_rect(r)
-        painter.setPen(QPen(QColor(tokens.TEXT), 1))
-        painter.setBrush(_ACCENT if photo.is_adopted else tokens.color(tokens.PANEL, 200))
-        painter.drawRoundedRect(box, 3, 3)
+        box = QRectF(checkbox_rect(r))
         if photo.is_adopted:
-            painter.setPen(QPen(QColor(tokens.ON_PRIMARY), 2))
-            painter.drawLine(box.left() + 4, box.center().y(), box.left() + 7, box.bottom() - 4)
-            painter.drawLine(box.left() + 7, box.bottom() - 4, box.right() - 3, box.top() + 4)
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(_ACCENT)
+        else:
+            painter.setPen(QPen(tokens.color(tokens.TEXT_STRONG, 220), 1.4))
+            painter.setBrush(tokens.color(tokens.SUNKEN, 150))
+        painter.drawEllipse(box)
+        if photo.is_adopted:
+            check = QPen(QColor(tokens.ON_PRIMARY), 2)
+            check.setCapStyle(Qt.PenCapStyle.RoundCap)
+            painter.setPen(check)
+            x, y = box.left(), box.top()
+            painter.drawPolyline([QPointF(x + 5, y + 9.5), QPointF(x + 8, y + 12.5),
+                                  QPointF(x + 13, y + 6.5)])
 
         if photo.is_recommended:
-            base_font = painter.font()
-            star_font = painter.font()
-            star_font.setPointSize(13)
-            painter.setFont(star_font)
-            painter.setPen(_STAR)
-            painter.drawText(r.left() + 6, r.top() + 20, "★")
-            painter.setFont(base_font)
+            font = painter.font()
+            font.setPointSize(12)
+            star = QPainterPath()
+            star.addText(QPointF(r.left() + 6, r.top() + 19), font, "★")
+            painter.setPen(QPen(tokens.color(tokens.SUNKEN, 200), 2))
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawPath(star)
+            painter.fillPath(star, _STAR)
 
         if self._panel.show_score and photo.scores is not None:
             from myphotoworks.core.scoring import composite
 
             text = str(round(composite(photo.scores, self._panel.weights)))
-            badge = QRect(r.right() - 30, r.top() + self._panel.icon_px - 8, 26, 16)
+            badge = QRect(r.right() - 31, r.bottom() - 21, 26, 16)
             painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(tokens.color(tokens.PANEL, 215))
+            painter.setBrush(tokens.color(tokens.SUNKEN, 200))
             painter.drawRoundedRect(badge, 4, 4)
             painter.setPen(QColor(tokens.TEXT))
             painter.drawText(badge, Qt.AlignmentFlag.AlignCenter, text)
 
         if "흐림" in photo.reason:
-            badge = QRect(r.left() + 6, r.top() + self._panel.icon_px - 8, 32, 16)
+            badge = QRect(r.left() + 5, r.bottom() - 21, 32, 16)
             painter.setPen(Qt.PenStyle.NoPen)
             painter.setBrush(tokens.color(tokens.WARN, 230))
             painter.drawRoundedRect(badge, 4, 4)
@@ -155,10 +215,12 @@ class ThumbnailPanel(QListWidget):
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
-        self.setIconSize(QSize(THUMBNAIL_SIZE, THUMBNAIL_SIZE))
+        self.setIconSize(THUMB_BOX)
         self.setViewMode(QListWidget.ViewMode.IconMode)
         self.setResizeMode(QListWidget.ResizeMode.Adjust)
+        self.setMovement(QListWidget.Movement.Static)
         self.setSpacing(4)
+        self.setObjectName("thumbGrid")  # card padding in light_table.qss
         self.setDragDropMode(QListWidget.DragDropMode.DropOnly)
         self.setAcceptDrops(True)
         self.setSelectionMode(QListWidget.SelectionMode.ExtendedSelection)
@@ -170,6 +232,7 @@ class ThumbnailPanel(QListWidget):
         self._rows: list[PhotoItem | None] = []  # list rows; None = group header
         self._pool = QThreadPool.globalInstance()
         self._icons: dict[str, QIcon] = {}
+        self._sizes: dict[str, tuple[int, int]] = {}   # original (width, height) per path
         self._signals = _LoaderSignals()
         self._signals.loaded.connect(self._on_thumbnail_loaded)
 
@@ -177,7 +240,6 @@ class ThumbnailPanel(QListWidget):
         self._session = None
         self._grouped_view = False
         self._adopted_only = False
-        self.icon_px = THUMBNAIL_SIZE
         self.show_score = True
         self.show_reason = True
         self.weights = (0.5, 0.3, 0.2)
@@ -236,6 +298,10 @@ class ThumbnailPanel(QListWidget):
 
     def all_photos(self) -> list[PhotoItem]:
         return list(self._photos)
+
+    def image_size(self, photo: PhotoItem) -> tuple[int, int] | None:
+        """Original (width, height) once the thumbnail has loaded, else None."""
+        return self._sizes.get(str(photo.source_path))
 
     def photos(self) -> list[PhotoItem]:
         """The displayed list — this is also what preview / batch processing act on."""
@@ -349,7 +415,8 @@ class ThumbnailPanel(QListWidget):
     def _add_photo_item(self, photo: PhotoItem) -> None:
         item = QListWidgetItem(photo.source_path.name)
         item.setTextAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignBottom)
-        item.setSizeHint(QSize(THUMBNAIL_SIZE + 20, THUMBNAIL_SIZE + 24))
+        item.setSizeHint(QSize(THUMB_BOX.width() + 2 * CARD_PAD,
+                               THUMB_BOX.height() + CARD_PAD + CARD_TEXT_H + 4))
         item.setData(_PHOTO_ROLE, photo)
         if self._session is not None and photo.reason:
             item.setToolTip(photo.reason)
@@ -357,16 +424,24 @@ class ThumbnailPanel(QListWidget):
         if icon is not None:
             item.setIcon(icon)
         else:
-            self._pool.start(_ThumbnailLoader(photo.source_path, self._signals))
+            self._pool.start(_ThumbnailLoader(photo.source_path, self._signals, self._load_box()))
         self.addItem(item)
         self._rows.append(photo)
 
     def _header_width(self) -> int:
         return max(200, self.viewport().width() - 24)
 
-    def _on_thumbnail_loaded(self, path: str, image: QImage) -> None:
-        icon = QIcon(QPixmap.fromImage(image))
+    def _load_box(self) -> QSize:
+        """Decode size: the display box scaled to the screen so HiDPI stays sharp."""
+        ratio = self.devicePixelRatioF()
+        return QSize(round(THUMB_BOX.width() * ratio), round(THUMB_BOX.height() * ratio))
+
+    def _on_thumbnail_loaded(self, path: str, image: QImage, width: int, height: int) -> None:
+        pixmap = QPixmap.fromImage(image)
+        pixmap.setDevicePixelRatio(self.devicePixelRatioF())
+        icon = QIcon(pixmap)
         self._icons[path] = icon
+        self._sizes[path] = (width, height)
         for i, p in enumerate(self._rows):
             if p is not None and str(p.source_path) == path:
                 item = self.item(i)
@@ -385,12 +460,20 @@ class ThumbnailPanel(QListWidget):
                 if item is not None:
                     item.setSizeHint(QSize(self._header_width(), 26))
 
+    def paintEvent(self, event) -> None:  # noqa: N802
+        super().paintEvent(event)
+        if self.count() == 0:
+            painter = QPainter(self.viewport())
+            painter.setPen(QColor(tokens.TEXT_MUTED))
+            painter.drawText(self.viewport().rect(), Qt.AlignmentFlag.AlignCenter,
+                             "사진을 여기로 끌어다 놓거나 파일 추가를 누르세요.")
+
     def mousePressEvent(self, event) -> None:  # noqa: N802
         if self._session is not None and event.button() == Qt.MouseButton.LeftButton:
             index = self.indexAt(event.position().toPoint())
             if index.isValid():
                 photo = index.data(_PHOTO_ROLE)
-                rect = self.visualRect(index)
+                rect = self.itemDelegate().photo_rect(self.visualRect(index), index)
                 if photo is not None and checkbox_rect(rect).contains(event.position().toPoint()):
                     self.adoption_toggle_requested.emit(photo, not photo.is_adopted)
                     return

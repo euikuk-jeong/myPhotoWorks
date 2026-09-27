@@ -137,6 +137,65 @@ QPushButton[primary="true"]:disabled {
     color: @text_disabled;
 }
 
+/* Quiet text button — secondary, low-emphasis actions (property quiet="true") */
+QPushButton[quiet="true"] {
+    background: transparent;
+    border: none;
+    color: @text_muted;
+    padding: 5px 8px;
+    min-width: 0;
+}
+
+QPushButton[quiet="true"]:hover {
+    background: @raised;
+    color: @text;
+}
+
+QPushButton[quiet="true"]:disabled {
+    background: transparent;
+    color: @text_disabled;
+}
+
+/* Segmented control (container objectName="segmented", buttons segment="true") */
+QWidget#segmented {
+    background: @sunken;
+    border-radius: 7px;
+}
+
+QPushButton[segment="true"] {
+    background: transparent;
+    border: none;
+    border-radius: 5px;
+    color: @text_muted;
+    padding: 4px 16px;
+    min-width: 0;
+}
+
+QPushButton[segment="true"]:hover:!checked {
+    color: @text;
+}
+
+QPushButton[segment="true"]:checked {
+    background: @raised;
+    color: @text_strong;
+    font-weight: 500;
+}
+
+QPushButton[segment="true"]:disabled {
+    background: transparent;
+    color: @text_disabled;
+}
+
+/* Main window toolbar */
+QWidget#toolbar {
+    background: @panel;
+    border-bottom: 1px solid @edge;
+}
+
+QFrame#toolbarDivider {
+    background: @line;
+}
+
 /* Small "..." button */
 QPushButton[text="..."] {
     min-width: 30px;
@@ -321,6 +380,14 @@ QSpinBox::down-arrow:disabled {
     image: none;
 }
 
+/* Correction / film recipe picker: the main choice on the correction tab */
+QComboBox#recipeCombo {
+    min-height: 32px;
+    padding: 6px 10px;
+    font-size: 10.5pt;
+    font-weight: 500;
+}
+
 QComboBox::drop-down {
     border: none;
     width: 22px;
@@ -444,6 +511,11 @@ QStatusBar {
 
 QStatusBar QLabel {
     color: @text_muted;
+    padding: 0 6px;
+}
+
+QStatusBar QLabel#pickCount {
+    color: @pick_text;
 }
 
 QStatusBar::item {
@@ -481,6 +553,15 @@ QListWidget::item {
     border: 1px solid transparent;
     border-radius: 6px;
     padding: 2px;
+}
+
+/* Thumbnail cards: room around the photo for the adoption loop (CARD_PAD) */
+QListWidget#thumbGrid {
+    padding: 14px 12px;
+}
+
+QListWidget#thumbGrid::item {
+    padding: 12px 12px 2px 12px;
 }
 
 /* Same treatment as a selected group card in the review window */

@@ -11,6 +11,7 @@ from PyQt6.QtWidgets import (
     QButtonGroup,
     QCheckBox,
     QFileDialog,
+    QFrame,
     QHBoxLayout,
     QLabel,
     QMainWindow,
@@ -27,8 +28,14 @@ from myphotoworks.models.photo_item import PhotoItem
 from myphotoworks.models.settings import AppSettings
 from myphotoworks.processing.group_runner import correction_key
 from myphotoworks.ui.settings_panel import SettingsPanel
+from myphotoworks.ui.styles import theme_icon
 from myphotoworks.ui.thumbnail_panel import ThumbnailPanel
 from myphotoworks.utils.config import load_config, load_settings, save_config, save_settings
+
+TOOLBAR_H = 52
+CONTROL_H = 32
+SETTINGS_W = 340
+SETTINGS_MIN_W = 320
 
 SUPPORTED_FILTER = (
     "이미지 파일 (*.jpg *.jpeg *.png *.tif *.tiff *.bmp *.webp);;"
@@ -87,77 +94,85 @@ class MainWindow(QMainWindow):
         central = QWidget()
         self.setCentralWidget(central)
         root = QVBoxLayout(central)
-        root.setContentsMargins(4, 4, 4, 4)
-        root.setSpacing(4)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(0)
 
-        # --- Top button bar ---
-        btn_bar = QHBoxLayout()
+        # --- Toolbar: import | tidy ...... view ...... act ---
+        toolbar = QWidget()
+        toolbar.setObjectName("toolbar")  # styled in light_table.qss
+        toolbar.setFixedHeight(TOOLBAR_H)
+        btn_bar = QHBoxLayout(toolbar)
+        btn_bar.setContentsMargins(16, 0, 16, 0)
+        btn_bar.setSpacing(6)
 
-        self._add_files_btn = QPushButton("파일 추가")
-        self._add_files_btn.setFixedHeight(28)
-        self._add_files_btn.clicked.connect(self._on_add_files)
-        btn_bar.addWidget(self._add_files_btn)
+        def button(text: str, slot, *, enabled: bool = True, role: str = "") -> QPushButton:
+            btn = QPushButton(text)
+            btn.setFixedHeight(CONTROL_H)
+            btn.setEnabled(enabled)
+            if role:
+                btn.setProperty(role, True)
+            btn.clicked.connect(slot)
+            btn_bar.addWidget(btn)
+            return btn
 
-        self._add_folder_btn = QPushButton("폴더 추가")
-        self._add_folder_btn.setFixedHeight(28)
-        self._add_folder_btn.clicked.connect(self._on_add_folder)
-        btn_bar.addWidget(self._add_folder_btn)
+        self._add_files_btn = button("파일 추가", self._on_add_files)
+        self._add_files_btn.setIcon(theme_icon("plus"))
+        self._add_folder_btn = button("폴더 추가", self._on_add_folder)
+        self._add_folder_btn.setIcon(theme_icon("folder"))
 
-        self._remove_btn = QPushButton("선택 제거")
-        self._remove_btn.setFixedHeight(28)
-        self._remove_btn.setEnabled(False)
-        self._remove_btn.clicked.connect(self._on_remove_selected)
-        btn_bar.addWidget(self._remove_btn)
+        divider = QFrame()
+        divider.setObjectName("toolbarDivider")
+        divider.setFixedSize(1, 20)
+        btn_bar.addSpacing(4)
+        btn_bar.addWidget(divider)
+        btn_bar.addSpacing(4)
 
-        self._clear_btn = QPushButton("전체 제거")
-        self._clear_btn.setFixedHeight(28)
-        self._clear_btn.setEnabled(False)
-        self._clear_btn.clicked.connect(self._on_clear_all)
-        btn_bar.addWidget(self._clear_btn)
+        self._remove_btn = button("선택 제거", self._on_remove_selected,
+                                  enabled=False, role="quiet")
+        self._clear_btn = button("전체 제거", self._on_clear_all, enabled=False, role="quiet")
 
         btn_bar.addStretch()
 
-        self._all_view_btn = QPushButton("전체 보기")
-        self._group_view_btn = QPushButton("그룹별 보기")
+        segmented = QWidget()
+        segmented.setObjectName("segmented")
+        segmented.setFixedHeight(CONTROL_H)
+        seg_layout = QHBoxLayout(segmented)
+        seg_layout.setContentsMargins(2, 2, 2, 2)
+        seg_layout.setSpacing(0)
+        self._all_view_btn = QPushButton("전체")
+        self._group_view_btn = QPushButton("그룹별")
         for b in (self._all_view_btn, self._group_view_btn):
             b.setCheckable(True)
-            b.setFixedHeight(28)
+            b.setProperty("segment", True)
+            b.setFixedHeight(CONTROL_H - 4)
             b.setEnabled(False)
-            btn_bar.addWidget(b)
+            seg_layout.addWidget(b)
         self._all_view_btn.setChecked(True)
         self._view_group = QButtonGroup(self)
         self._view_group.setExclusive(True)
         self._view_group.addButton(self._all_view_btn)
         self._view_group.addButton(self._group_view_btn)
         self._view_group.buttonClicked.connect(lambda _b: self._apply_view())
+        btn_bar.addWidget(segmented)
 
         self._adopted_only_cb = QCheckBox("채택만 보기")
         self._adopted_only_cb.setEnabled(False)
         self._adopted_only_cb.toggled.connect(lambda _c: self._apply_view())
+        btn_bar.addSpacing(8)
         btn_bar.addWidget(self._adopted_only_cb)
 
-        self._review_btn = QPushButton("그룹 리뷰")
-        self._review_btn.setFixedHeight(28)
-        self._review_btn.setEnabled(False)
-        self._review_btn.clicked.connect(self._on_review)
-        btn_bar.addWidget(self._review_btn)
+        btn_bar.addStretch()
 
-        self._preview_btn = QPushButton("미리보기")
-        self._preview_btn.setFixedHeight(28)
-        self._preview_btn.setEnabled(False)
-        self._preview_btn.clicked.connect(self._on_preview)
-        btn_bar.addWidget(self._preview_btn)
+        self._review_btn = button("그룹 리뷰", self._on_review, enabled=False)
+        self._preview_btn = button("미리보기", self._on_preview, enabled=False)
+        btn_bar.addSpacing(4)
+        self._process_btn = button("일괄 적용", self._on_process, enabled=False, role="primary")
 
-        self._process_btn = QPushButton("일괄 적용")
-        self._process_btn.setFixedHeight(28)
-        self._process_btn.setEnabled(False)
-        self._process_btn.clicked.connect(self._on_process)
-        btn_bar.addWidget(self._process_btn)
+        root.addWidget(toolbar)
 
-        root.addLayout(btn_bar)
-
-        # --- Splitter: thumbnail panel (large left) | settings panel ---
+        # --- Splitter: thumbnail workspace | settings panel (fixed width) ---
         splitter = QSplitter(Qt.Orientation.Horizontal)
+        splitter.setChildrenCollapsible(False)
 
         self._thumb_panel = ThumbnailPanel()
         self._thumb_panel.photo_selected.connect(self._on_photo_selected)
@@ -180,20 +195,29 @@ class MainWindow(QMainWindow):
         self._settings_panel.group_review_requested.connect(self._on_review)
         self._settings_panel.group_rescore_requested.connect(self._on_rescore)
         splitter.addWidget(self._settings_panel)
+        self._settings_panel.setMinimumWidth(SETTINGS_MIN_W)
 
+        # The workspace absorbs window resizes; the settings panel keeps its width
+        splitter.setStretchFactor(0, 1)
+        splitter.setStretchFactor(1, 0)
+        splitter.setSizes([self.width() - SETTINGS_W, SETTINGS_W])
 
-        # Thumbnail panel takes ~2/3, settings panel ~1/3
-        splitter.setStretchFactor(0, 2)
-        splitter.setStretchFactor(1, 1)
+        root.addWidget(splitter, 1)
 
-        root.addWidget(splitter)
-
-        # --- Status bar ---
+        # --- Status bar: counts | adopted (ochre) ...... selected file ---
         status_bar = QStatusBar()
+        status_bar.setSizeGripEnabled(False)
         self.setStatusBar(status_bar)
 
         self._status_label = QLabel("사진을 추가하세요.")
-        status_bar.addWidget(self._status_label, 1)
+        status_bar.addWidget(self._status_label)
+        self._pick_label = QLabel()
+        self._pick_label.setObjectName("pickCount")  # styled in light_table.qss
+        status_bar.addWidget(self._pick_label, 1)
+
+        self._file_label = QLabel()
+        status_bar.addPermanentWidget(self._file_label)
+        self._thumb_panel.setFocus()  # not the first toolbar button
 
         self._progress_bar = QProgressBar()
         self._progress_bar.setFixedWidth(220)
@@ -245,8 +269,19 @@ class MainWindow(QMainWindow):
         self._update_buttons()
 
     def _on_photo_selected(self, photo: PhotoItem) -> None:
-        self._status_label.setText(photo.source_path.name)
+        self._show_file(photo)
         self._remove_btn.setEnabled(True)
+
+    def _show_file(self, photo: PhotoItem | None) -> None:
+        """Right side of the status bar: selected file name and pixel size."""
+        if photo is None:
+            self._file_label.clear()
+            return
+        size = self._thumb_panel.image_size(photo)
+        text = photo.source_path.name
+        if size is not None:
+            text += f"    {size[0]:,} × {size[1]:,}"
+        self._file_label.setText(text)
 
     def _on_photo_double_clicked(self, photo: PhotoItem) -> None:
         photos = self._thumb_panel.photos()
@@ -544,16 +579,18 @@ class MainWindow(QMainWindow):
         self._process_btn.setEnabled(shown > 0)
         self._process_btn.setText(f"일괄 적용 ({shown:,}장)" if shown else "일괄 적용")
         self._settings_panel.group_tab.set_has_photos(has_photos)
+        self._pick_label.clear()
         if self._session is not None:
-            self._status_label.setText(
-                f"표시 {shown:,}장 / 전체 {total:,}장 · {self._session.group_count():,}그룹 · "
-                f"채택 {self._session.adopted_count():,}장"
-                + (" · 채택만 보기" if self._adopted_only_cb.isChecked() else "")
-            )
+            count = f"사진 {total:,}장"
+            if shown != total:
+                count = f"표시 {shown:,}장 / 전체 {total:,}장"
+            self._status_label.setText(f"{count}, 그룹 {self._session.group_count():,}개")
+            self._pick_label.setText(f"채택 {self._session.adopted_count():,}장")
         elif has_photos:
-            self._status_label.setText(f"{total:,}장 로드됨")
+            self._status_label.setText(f"사진 {total:,}장")
         else:
             self._status_label.setText("사진을 추가하세요.")
+        self._show_file(self._thumb_panel.current_photo())
 
     def _set_processing(self, processing: bool) -> None:
         self._add_files_btn.setEnabled(not processing)

@@ -113,6 +113,7 @@ class SettingsPanel(QTabWidget):
         mode_group = QGroupBox("보정 방식")
         mode_layout = QVBoxLayout(mode_group)
         self._mode_combo = QComboBox()
+        self._mode_combo.setObjectName("recipeCombo")  # larger card-like combo in QSS
         populate_correction_combo(self._mode_combo)
         self._mode_combo.currentIndexChanged.connect(self._on_mode_changed)
         mode_layout.addWidget(self._mode_combo)

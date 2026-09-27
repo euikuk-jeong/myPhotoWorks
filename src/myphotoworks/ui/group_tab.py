@@ -103,7 +103,7 @@ class GroupTab(QWidget):
         root.addStretch()
 
     def _build_settings_box(self) -> QGroupBox:
-        self._settings_box = QGroupBox("① 그룹핑 설정")
+        self._settings_box = QGroupBox("그룹핑 설정")
         box = QVBoxLayout(self._settings_box)
         box.setSpacing(8)
 
@@ -172,7 +172,7 @@ class GroupTab(QWidget):
         return self._settings_box
 
     def _build_run_box(self) -> QGroupBox:
-        self._run_box = QGroupBox("② 그룹핑 실행 · 결과")
+        self._run_box = QGroupBox("실행과 결과")
         box = QVBoxLayout(self._run_box)
         box.setSpacing(8)
 
@@ -222,7 +222,7 @@ class GroupTab(QWidget):
         return self._run_box
 
     def _build_recommend_box(self) -> QGroupBox:
-        self._recommend_box = QGroupBox("③ 추천 설정")
+        self._recommend_box = QGroupBox("추천 설정")
         box = QVBoxLayout(self._recommend_box)
         box.setSpacing(8)
 
