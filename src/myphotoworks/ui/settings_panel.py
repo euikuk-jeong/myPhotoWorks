@@ -9,7 +9,6 @@ from PyQt6.QtWidgets import (
     QComboBox,
     QFileDialog,
     QFormLayout,
-    QGroupBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -34,6 +33,7 @@ from myphotoworks.recipes.builtin_recipes import (
     build_correction_combo_items,
     populate_correction_combo,
 )
+from myphotoworks.ui.section import HEADER_H, Section
 from myphotoworks.ui.styles import tokens
 
 RESIZE_PRESETS = [1080, 1920, 2048, 2560, 3840]
@@ -65,11 +65,9 @@ class SettingsPanel(QTabWidget):
         self.addTab(self._build_resize_tab(), "리사이즈")
         self.addTab(self._build_output_tab(), "출력")
         self._build_group_tab()
-        # section contents line up with their (flush-left) titles; see QGroupBox in QSS.
-        # Titles are bracketed so each section name stands out: "보정 방식" -> "[보정 방식]"
-        for box in self.findChildren(QGroupBox):
-            box.layout().setContentsMargins(0, 8, 0, 4)
-            box.setTitle(f"[{box.title()}]")
+        # section content sits under its header band, indented so the grouping reads
+        for box in self.findChildren(Section):
+            box.layout().setContentsMargins(12, HEADER_H + 10, 4, 14)
 
     def settings(self) -> AppSettings:
         return self._settings
@@ -118,17 +116,16 @@ class SettingsPanel(QTabWidget):
         layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
         # Correction mode dropdown
-        mode_group = QGroupBox("보정 방식")
+        mode_group = Section("보정 방식")
         mode_layout = QVBoxLayout(mode_group)
         self._mode_combo = QComboBox()
-        self._mode_combo.setObjectName("recipeCombo")  # larger card-like combo in QSS
         populate_correction_combo(self._mode_combo)
         self._mode_combo.currentIndexChanged.connect(self._on_mode_changed)
         mode_layout.addWidget(self._mode_combo)
         layout.addWidget(mode_group)
 
         # Brightness / Contrast
-        bc_group = QGroupBox("밝기 / 대비")
+        bc_group = Section("밝기 / 대비")
         bc_layout = QFormLayout(bc_group)
 
         self._brightness_slider = _LabeledSlider(-100, 100, self._settings.brightness)
@@ -142,7 +139,7 @@ class SettingsPanel(QTabWidget):
         layout.addWidget(bc_group)
 
         # Recipe info (shown only when RECIPE mode is selected)
-        self._recipe_info_group = QGroupBox("레시피 정보")
+        self._recipe_info_group = Section("레시피 정보")
         self._recipe_info_layout = QFormLayout(self._recipe_info_group)
         self._recipe_info_labels: dict[str, QLabel] = {}
         recipe_fields = ("필름 시뮬레이션", "화이트밸런스", "톤 커브", "채도", "선명도", "그레인")
@@ -211,7 +208,7 @@ class SettingsPanel(QTabWidget):
         layout.setSpacing(10)
         layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
-        resize_group = QGroupBox("리사이즈 설정")
+        resize_group = Section("리사이즈 설정")
         form = QFormLayout(resize_group)
 
         from PyQt6.QtWidgets import QCheckBox
@@ -274,7 +271,7 @@ class SettingsPanel(QTabWidget):
         layout.setSpacing(10)
         layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
-        path_group = QGroupBox("저장 경로")
+        path_group = Section("저장 경로")
         path_layout = QVBoxLayout(path_group)
 
         self._radio_first = QRadioButton("첫 번째 파일 기준 output 폴더")
@@ -307,7 +304,7 @@ class SettingsPanel(QTabWidget):
         layout.addWidget(path_group)
         self._update_custom_dir_controls()
 
-        name_group = QGroupBox("파일명")
+        name_group = Section("파일명")
         name_form = QFormLayout(name_group)
 
         self._prefix_edit = QLineEdit(self._settings.output_prefix)
@@ -322,7 +319,7 @@ class SettingsPanel(QTabWidget):
 
         layout.addWidget(name_group)
 
-        quality_group = QGroupBox("JPG 품질")
+        quality_group = Section("JPG 품질")
         quality_layout = QHBoxLayout(quality_group)
 
         self._quality_slider = QSlider(Qt.Orientation.Horizontal)

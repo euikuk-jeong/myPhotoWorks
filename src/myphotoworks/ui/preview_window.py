@@ -885,6 +885,8 @@ class PreviewWindow(QMainWindow):
         if checked:
             if self._exif_panel is None:
                 self._exif_panel = ExifPanel(self)
+                # × / Esc on the overlay turns the EXIF button off as well
+                self._exif_panel.closed.connect(lambda: self._exif_btn.setChecked(False))
             self._exif_panel.update_photo(
                 self._photos[self._index].source_path,
                 index=self._index + 1, total=len(self._photos),
