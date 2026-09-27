@@ -78,6 +78,16 @@ def status_badge(status: ProcessStatus) -> tuple[str, str] | None:
     }.get(status)
 
 
+def status_badge_rect(photo_rect: QRect, text_width: int, blur_shown: bool) -> QRect:
+    """Status badge at the photo's bottom-left; one row higher when the blur badge is there.
+
+    The width follows the text so it stays clear of the bottom-right score badge
+    on narrow portrait photos.
+    """
+    bottom = photo_rect.bottom() - (39 if blur_shown else 21)
+    return QRect(photo_rect.left() + 5, bottom, max(32, text_width + 12), 16)
+
+
 class _LoaderSignals(QObject):
     loaded = pyqtSignal(str, QImage, int, int)   # path, thumbnail, original width, height
 
@@ -146,9 +156,11 @@ class _CardDelegate(QStyledItemDelegate):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         status = status_badge(photo.status)
         if status is not None:
-            # one row above the blur badge slot so the two never overlap
             text, color = status
-            badge = QRect(r.left() + 5, r.bottom() - 39, 40, 16)
+            blur_shown = self._panel.grouping_active and "흐림" in photo.reason
+            badge = status_badge_rect(
+                r, painter.fontMetrics().horizontalAdvance(text), blur_shown
+            )
             painter.setPen(Qt.PenStyle.NoPen)
             painter.setBrush(tokens.color(color, 230))
             painter.drawRoundedRect(badge, 4, 4)

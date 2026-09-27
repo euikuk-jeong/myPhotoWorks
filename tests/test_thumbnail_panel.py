@@ -127,3 +127,30 @@ def test_update_status_keeps_file_name_on_card(qtbot, tmp_path):
         panel.update_status(photo)
         panel.grab()                      # paint the badge path once per state
         assert panel.item(0).text() == "a.jpg"
+
+
+def test_status_badge_sits_on_bottom_row_without_blur_badge():
+    from myphotoworks.ui.thumbnail_panel import status_badge_rect
+
+    photo = QRect(10, 20, 168, 112)
+    badge = status_badge_rect(photo, 24, blur_shown=False)
+    assert badge.top() == photo.bottom() - 21          # same row as the blur badge slot
+    assert photo.contains(badge)
+
+
+def test_status_badge_moves_above_blur_badge():
+    from myphotoworks.ui.thumbnail_panel import status_badge_rect
+
+    photo = QRect(10, 20, 168, 112)
+    blur = QRect(photo.left() + 5, photo.bottom() - 21, 32, 16)
+    badge = status_badge_rect(photo, 24, blur_shown=True)
+    assert not badge.intersects(blur)
+    assert badge.bottom() < blur.top()
+
+
+def test_status_badge_clears_score_badge_on_portrait_photo():
+    from myphotoworks.ui.thumbnail_panel import status_badge_rect
+
+    photo = QRect(10, 20, 75, 112)                      # portrait in the 3:2 box
+    score = QRect(photo.right() - 31, photo.bottom() - 21, 26, 16)
+    assert not status_badge_rect(photo, 24, blur_shown=False).intersects(score)
