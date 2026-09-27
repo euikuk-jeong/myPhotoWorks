@@ -165,6 +165,7 @@ def test_review_page_keys_step_groups_and_toolbar_shows_adopted(qtbot, tmp_path)
     ids = [g.id for g in session.groups()]
     assert win._gid == ids[0]
     assert win._adopted_label.text() == f"채택 {session.adopted_count()}장/4장"
+    assert win.windowTitle().endswith(f"· 채택 {session.adopted_count()}장/4장")
     QTest.keyClick(win._strip, Qt.Key.Key_PageDown)
     assert win._gid == ids[1]
     QTest.keyClick(win._strip, Qt.Key.Key_PageDown)   # already last: stays

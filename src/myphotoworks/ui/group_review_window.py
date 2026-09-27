@@ -593,11 +593,9 @@ class GroupReviewWindow(QWidget):
         pos = ids.index(self._gid) + 1 if self._gid in ids else 0
         self._title_label.setText(f"그룹 {pos:,} / {len(ids):,}")
         total = sum(len(g.photos) for g in groups)
-        self._adopted_label.setText(f"채택 {self._session.adopted_count():,}장/{total:,}장")
-        self.setWindowTitle(
-            f"그룹 리뷰 — 그룹 {pos:,} / {len(ids):,}"
-            f" · 채택 {self._session.adopted_count():,}장"
-        )
+        adopted = f"채택 {self._session.adopted_count():,}장/{total:,}장"
+        self._adopted_label.setText(adopted)
+        self.setWindowTitle(f"그룹 리뷰 — 그룹 {pos:,} / {len(ids):,} · {adopted}")
 
     def _fill_group_list(self, groups: list[Group]) -> None:
         """Update the cards in place; rebuild only when groups were added/removed/reordered.
