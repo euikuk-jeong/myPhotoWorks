@@ -97,7 +97,7 @@ def test_status_bar_splits_counts_adopted_and_selected_file(window, qtbot):
     photo = window._thumb_panel.photos()[0]
     window._show_file(photo)
     text = window._file_label.text()
-    assert text.startswith(f"[{photo.source_path.name}]")
+    assert text.startswith(f"파일명: {photo.source_path.name}")
     size = window._thumb_panel.image_size(photo)
     if size is not None:
         assert text.endswith(f"해상도: {size[0]:,} x {size[1]:,}")
@@ -107,6 +107,70 @@ def test_toolbar_marks_process_as_primary_and_view_as_segments(window):
     assert window._process_btn.property("primary") is True
     assert window._all_view_btn.property("segment") is True
     assert window._remove_btn.property("quiet") is True
+
+
+def test_rebalance_weights_keeps_total_100_and_ratio():
+    from myphotoworks.ui.group_tab import rebalance_weights
+
+    assert rebalance_weights([50, 30, 20], 0, 10) == [10, 54, 36]
+    assert rebalance_weights([50, 30, 20], 2, 100) == [0, 0, 100]
+    assert rebalance_weights([100, 0, 0], 0, 40) == [40, 30, 30]   # others were 0: split
+    assert sum(rebalance_weights([33, 33, 34], 1, 47)) == 100
+
+
+def test_moving_one_weight_slider_moves_the_others(qtbot):
+    from myphotoworks.ui.group_tab import GroupTab
+
+    s = AppSettings()
+    tab = GroupTab(s)
+    qtbot.addWidget(tab)
+    tab._w_sliders[0].setValue(10)
+    values = [sl.value() for sl in tab._w_sliders]
+    assert values == [10, 54, 36]
+    assert [lbl.text() for lbl in tab._w_labels] == ["10%", "54%", "36%"]
+
+
+def test_settings_panel_section_titles_are_bracketed(qtbot):
+    from PyQt6.QtWidgets import QGroupBox
+
+    from myphotoworks.ui.settings_panel import SettingsPanel
+
+    panel = SettingsPanel(AppSettings())
+    qtbot.addWidget(panel)
+    titles = [b.title() for b in panel.findChildren(QGroupBox)]
+    assert "[보정 방식]" in titles and "[그룹핑 설정]" in titles
+    assert all(t.startswith("[") and t.endswith("]") for t in titles)
+
+
+def test_review_page_keys_step_groups_and_toolbar_shows_adopted(qtbot, tmp_path):
+    from PyQt6.QtTest import QTest
+
+    from myphotoworks.core.scoring import QualityScores
+    from myphotoworks.models.group_session import GroupSession
+    from myphotoworks.models.photo_item import PhotoItem
+    from myphotoworks.ui.group_review_window import GroupReviewWindow
+
+    photos = []
+    for i in range(4):
+        p = tmp_path / f"pg_{i}.jpg"
+        scene(i).save(p, "JPEG")
+        item = PhotoItem(p)
+        item.scores = QualityScores(50, 60, 60)
+        photos.append(item)
+    session = GroupSession(photos, [[0, 1], [2, 3]], (0.5, 0.3, 0.2))
+    win = GroupReviewWindow(session, AppSettings())
+    qtbot.addWidget(win)
+    win.show()
+    qtbot.waitExposed(win)
+    ids = [g.id for g in session.groups()]
+    assert win._gid == ids[0]
+    assert win._adopted_label.text() == f"채택 {session.adopted_count()}장/4장"
+    QTest.keyClick(win._strip, Qt.Key.Key_PageDown)
+    assert win._gid == ids[1]
+    QTest.keyClick(win._strip, Qt.Key.Key_PageDown)   # already last: stays
+    assert win._gid == ids[1]
+    QTest.keyClick(win._strip, Qt.Key.Key_PageUp)
+    assert win._gid == ids[0]
 
 
 def test_adoption_bar_fill_is_proportional_with_visible_minimum():

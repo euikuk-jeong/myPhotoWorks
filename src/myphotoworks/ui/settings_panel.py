@@ -65,9 +65,11 @@ class SettingsPanel(QTabWidget):
         self.addTab(self._build_resize_tab(), "리사이즈")
         self.addTab(self._build_output_tab(), "출력")
         self._build_group_tab()
-        # section contents line up with their (flush-left) titles; see QGroupBox in QSS
+        # section contents line up with their (flush-left) titles; see QGroupBox in QSS.
+        # Titles are bracketed so each section name stands out: "보정 방식" -> "[보정 방식]"
         for box in self.findChildren(QGroupBox):
             box.layout().setContentsMargins(0, 8, 0, 4)
+            box.setTitle(f"[{box.title()}]")
 
     def settings(self) -> AppSettings:
         return self._settings
@@ -98,6 +100,8 @@ class SettingsPanel(QTabWidget):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        # always shown: expanding "추천 기준 가중치" must not narrow the content mid-click
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
         scroll.setObjectName("groupScroll")  # styled in light_table.qss
         scroll.setWidget(self.group_tab)
         self.addTab(scroll, "그룹")

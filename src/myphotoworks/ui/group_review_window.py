@@ -104,6 +104,15 @@ class GroupSummary:
         return f"그룹 {self.number:,} · {self.count:,}장 · 채택 {self.adopted:,}  [{self.tag}]"
 
 
+def _group_step_key(event, signal) -> bool:
+    """PageUp / PageDown move between groups instead of scrolling the list."""
+    step = {Qt.Key.Key_PageUp: -1, Qt.Key.Key_PageDown: 1}.get(event.key())
+    if step is None:
+        return False
+    signal.emit(step)
+    return True
+
+
 def adoption_bar_fill(width: float, adopted: int, count: int) -> float:
     """Filled length of a ``width``-long bar for ``adopted`` of ``count`` photos.
 
@@ -249,6 +258,11 @@ class _GroupList(QListWidget):
     """Group list that accepts photo cards dragged from the film strip."""
 
     photo_dropped = pyqtSignal(int)  # target group id
+    group_step_requested = pyqtSignal(int)  # PageUp -1 / PageDown +1
+
+    def keyPressEvent(self, event) -> None:  # noqa: N802
+        if not _group_step_key(event, self.group_step_requested):
+            super().keyPressEvent(event)
 
     def __init__(self) -> None:
         super().__init__()
@@ -281,6 +295,7 @@ class _Strip(QListWidget):
 
     adoption_toggle_requested = pyqtSignal(object, bool)
     context_requested = pyqtSignal(object, object)  # photo, global pos
+    group_step_requested = pyqtSignal(int)          # PageUp -1 / PageDown +1
 
     def __init__(self) -> None:
         super().__init__()
@@ -335,6 +350,8 @@ class _Strip(QListWidget):
             if photo is not None:
                 self.adoption_toggle_requested.emit(photo, not photo.is_adopted)
                 return
+        if _group_step_key(event, self.group_step_requested):
+            return
         super().keyPressEvent(event)
 
 
@@ -385,13 +402,21 @@ class GroupReviewWindow(QWidget):
         status.setFixedHeight(28)
         sl = QHBoxLayout(status)
         sl.setContentsMargins(16, 0, 16, 0)
-        sl.addWidget(QLabel("← → 사진 이동      Space 채택 토글      Ctrl+Z 되돌리기"))
-        sl.addStretch()
         self._recent = QLabel("최근 작업: 없음")
         sl.addWidget(self._recent)
+        sl.addStretch()
+        sl.addWidget(QLabel(
+            "← → 사진 이동      PageUp/Down 그룹 이동      Space 채택 토글      Ctrl+Z 되돌리기"
+        ))
         root.addWidget(status)
 
         QShortcut(QKeySequence("Ctrl+Z"), self, activated=self._undo)
+        # the two lists handle PageUp/Down themselves (item views swallow those keys);
+        # these shortcuts cover focus anywhere else in the window
+        QShortcut(QKeySequence(Qt.Key.Key_PageUp), self, activated=lambda: self._step_group(-1))
+        QShortcut(QKeySequence(Qt.Key.Key_PageDown), self, activated=lambda: self._step_group(1))
+        self._strip.group_step_requested.connect(self._step_group)
+        self._group_list.group_step_requested.connect(self._step_group)
 
     def _build_toolbar(self) -> QWidget:
         toolbar = QWidget()
@@ -404,6 +429,10 @@ class GroupReviewWindow(QWidget):
         self._title_label = QLabel()
         self._title_label.setObjectName("viewTitle")
         bar.addWidget(self._title_label)
+        bar.addSpacing(12)
+        self._adopted_label = QLabel()
+        self._adopted_label.setObjectName("pickCount")  # pick colour in light_table.qss
+        bar.addWidget(self._adopted_label)
         bar.addSpacing(20)
 
         def button(text: str, slot, role: str = "") -> QPushButton:
@@ -563,6 +592,8 @@ class GroupReviewWindow(QWidget):
         self._update_side_widgets()
         pos = ids.index(self._gid) + 1 if self._gid in ids else 0
         self._title_label.setText(f"그룹 {pos:,} / {len(ids):,}")
+        total = sum(len(g.photos) for g in groups)
+        self._adopted_label.setText(f"채택 {self._session.adopted_count():,}장/{total:,}장")
         self.setWindowTitle(
             f"그룹 리뷰 — 그룹 {pos:,} / {len(ids):,}"
             f" · 채택 {self._session.adopted_count():,}장"
@@ -714,6 +745,15 @@ class GroupReviewWindow(QWidget):
         self._session.mark_reviewed(gid)
         self._reload()
         self._strip.setFocus()
+
+    def _step_group(self, step: int) -> None:
+        """PageUp / PageDown: previous / next group."""
+        ids = [g.id for g in self._session.groups()]
+        if self._gid not in ids:
+            return
+        k = ids.index(self._gid) + step
+        if 0 <= k < len(ids):
+            self._select_group(ids[k])
 
     def _on_group_item(self, item, _prev) -> None:
         if item is not None:

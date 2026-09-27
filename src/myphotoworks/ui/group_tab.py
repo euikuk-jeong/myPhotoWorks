@@ -52,6 +52,26 @@ def similarity_level(value: int) -> tuple[str, str]:
     return _SIMILARITY_LEVELS[-1][1], _SIMILARITY_LEVELS[-1][2]
 
 
+def rebalance_weights(values: list[int], index: int, new: int) -> list[int]:
+    """Set ``values[index]`` to ``new`` (0–100) and resize the others so the sum is 100.
+
+    The others keep their ratio to each other; when they are all 0 they split evenly.
+    """
+    new = max(0, min(100, new))
+    rest = 100 - new
+    others = [i for i in range(len(values)) if i != index]
+    total = sum(values[i] for i in others)
+    out = list(values)
+    out[index] = new
+    for i in others:
+        out[i] = round(rest * values[i] / total) if total else rest // len(others)
+    # rounding drift goes to the largest other slider
+    drift = 100 - sum(out)
+    if drift and others:
+        out[max(others, key=lambda i: out[i])] += drift
+    return out
+
+
 def _note(text: str) -> QLabel:
     label = QLabel(text)
     label.setWordWrap(True)
@@ -92,7 +112,7 @@ class GroupTab(QWidget):
         root.setContentsMargins(14, 8, 14, 12)
         root.setSpacing(6)
         self._guide_btn = QPushButton("그룹핑·추천 원리 설명서 열기")
-        self._guide_btn.setProperty("quiet", True)
+        self._guide_btn.setFixedHeight(30)
         self._guide_btn.setToolTip(
             "사진을 어떻게 묶고 추천하는지 그림과 예제로 설명한 문서를 브라우저에서 엽니다."
         )
@@ -251,7 +271,9 @@ class GroupTab(QWidget):
         self._w_labels: list[QLabel] = []
         for name in ("선명도", "노출", "색감"):
             r = QHBoxLayout()
-            r.addWidget(QLabel(name))
+            name_lbl = QLabel(name)
+            name_lbl.setFixedWidth(48)  # same slider length for every row
+            r.addWidget(name_lbl)
             s = QSlider(Qt.Orientation.Horizontal)
             s.setRange(0, 100)
             s.valueChanged.connect(self._on_weight)
@@ -283,7 +305,7 @@ class GroupTab(QWidget):
         self._mode_combo.setCurrentIndex(max(0, idx))
         self._sim_slider.setValue(s.similarity_slider)
         self._gap_spin.setValue(s.time_gap)
-        for slider, w in zip(self._w_sliders, s.weights(), strict=True):
+        for slider, w in zip(self._w_sliders, normalize_weights(s.weights()), strict=True):
             slider.setValue(round(w * 100))
         self._global_cb.setChecked(s.global_clustering)
         self._exif_cb.setChecked(s.use_exif_hints)
@@ -336,7 +358,17 @@ class GroupTab(QWidget):
         self._settings.time_gap = float(value)
         self.changed.emit()
 
-    def _on_weight(self, _value: int) -> None:
+    def _on_weight(self, value: int) -> None:
+        moved = self.sender()
+        if moved in self._w_sliders:
+            # keep the total at 100: the other two sliders give way in proportion
+            values = rebalance_weights([s.value() for s in self._w_sliders],
+                                       self._w_sliders.index(moved), value)
+            for s, v in zip(self._w_sliders, values, strict=True):
+                if s is not moved:
+                    s.blockSignals(True)
+                    s.setValue(v)
+                    s.blockSignals(False)
         a, b, c = (s.value() / 100.0 for s in self._w_sliders)
         self._settings.weight_sharpness = a
         self._settings.weight_exposure = b
