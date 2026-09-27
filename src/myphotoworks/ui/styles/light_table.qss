@@ -209,8 +209,8 @@ QGroupBox {
     background: transparent;
     border: none;
     border-top: 1px solid @line;
-    margin-top: 28px;
-    padding: 14px 0 0 0;
+    margin-top: 20px;
+    padding: 12px 0 0 0;
 }
 
 QGroupBox::title {
@@ -533,7 +533,8 @@ QStatusBar QLabel {
     padding: 0 6px;
 }
 
-QStatusBar QLabel#pickCount {
+QStatusBar QLabel#pickCount,
+QLabel#pickCount {
     color: @pick_text;
 }
 

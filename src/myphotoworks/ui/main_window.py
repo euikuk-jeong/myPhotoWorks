@@ -279,9 +279,9 @@ class MainWindow(QMainWindow):
             self._file_label.clear()
             return
         size = self._thumb_panel.image_size(photo)
-        text = f"[{photo.source_path.name}]"
+        text = f"파일명: {photo.source_path.name}"
         if size is not None:
-            text += f"  해상도: {size[0]:,} x {size[1]:,}"
+            text += f"    해상도: {size[0]:,} x {size[1]:,}"
         self._file_label.setText(text)
 
     def _on_photo_double_clicked(self, photo: PhotoItem) -> None:

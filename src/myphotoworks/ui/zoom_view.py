@@ -10,6 +10,7 @@ from myphotoworks.ui.styles import tokens
 ZOOM_STEP = 1.15
 MAX_ZOOM = 8.0            # relative to the logical image size (see set_image)
 DETAIL_TRIGGER = 1.05     # ask for a sharper image once zoomed past fit * this
+HINT_H = 22               # strip under the image for the zoom / controls hint
 
 
 class ZoomPanView(QWidget):
@@ -62,10 +63,14 @@ class ZoomPanView(QWidget):
     def offset(self) -> QPointF:
         return QPointF(self._offset)
 
+    def _view_h(self) -> int:
+        """Height available to the image — the hint line has its own strip below it."""
+        return max(1, self.height() - HINT_H)
+
     def fit_zoom(self) -> float:
-        if not self._pixmap or self.width() <= 0 or self.height() <= 0:
+        if not self._pixmap or self.width() <= 0 or self._view_h() <= 1:
             return 1.0
-        return min(self.width() / self._logical_w, self.height() / self._logical_h)
+        return min(self.width() / self._logical_w, self._view_h() / self._logical_h)
 
     def relative_zoom(self) -> float:
         fit = self.fit_zoom()
@@ -121,7 +126,7 @@ class ZoomPanView(QWidget):
     def _clamp_offset(self, offset: QPointF) -> QPointF:
         sw, sh = self._logical_w * self._zoom, self._logical_h * self._zoom
         limit_x = max(0.0, (sw - self.width()) / 2.0)
-        limit_y = max(0.0, (sh - self.height()) / 2.0)
+        limit_y = max(0.0, (sh - self._view_h()) / 2.0)
         return QPointF(
             max(-limit_x, min(limit_x, offset.x())),
             max(-limit_y, min(limit_y, offset.y())),
@@ -131,7 +136,7 @@ class ZoomPanView(QWidget):
         sw, sh = self._logical_w * self._zoom, self._logical_h * self._zoom
         return QRectF(
             (self.width() - sw) / 2.0 + self._offset.x(),
-            (self.height() - sh) / 2.0 + self._offset.y(),
+            (self._view_h() - sh) / 2.0 + self._offset.y(),
             sw, sh,
         )
 
@@ -145,7 +150,10 @@ class ZoomPanView(QWidget):
                 painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, self._message)
             return
         painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+        painter.save()
+        painter.setClipRect(QRectF(0, 0, self.width(), self._view_h()))  # keep off the hint
         painter.drawPixmap(self._image_rect(), self._pixmap, QRectF(self._pixmap.rect()))
+        painter.restore()
 
         rel = self.relative_zoom()
         text = "화면 맞춤" if rel <= 1.001 else f"{rel * 100:.0f}%"
@@ -153,10 +161,8 @@ class ZoomPanView(QWidget):
         font = QFont(painter.font())
         font.setPointSize(8)
         painter.setFont(font)
-        painter.setPen(QColor(tokens.TEXT))
-        painter.fillRect(QRectF(6, self.height() - 24, self.width() - 12, 18),
-                         tokens.color(tokens.PANEL, 190))
-        painter.drawText(QRectF(12, self.height() - 24, self.width() - 24, 18),
+        painter.setPen(QColor(tokens.TEXT_MUTED))
+        painter.drawText(QRectF(4, self._view_h(), self.width() - 8, HINT_H),
                          Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
                          f"{text}   {hint}")
 
@@ -175,7 +181,7 @@ class ZoomPanView(QWidget):
             return
         r = new_zoom / self._zoom
         mouse = event.position()
-        centre = QPointF(self.width() / 2.0, self.height() / 2.0)
+        centre = QPointF(self.width() / 2.0, self._view_h() / 2.0)
         # keep the image point under the cursor fixed
         p = mouse - centre - self._offset
         self._zoom = new_zoom

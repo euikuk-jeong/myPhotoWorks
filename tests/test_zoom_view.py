@@ -71,7 +71,7 @@ def test_zoom_has_upper_limit(view):
 
 def test_small_image_stays_centred_on_the_short_axis(view):
     wheel(view, 400, 60, 120)            # 1.15x: 575x287 px still shorter than the 400px view
-    assert view._image_rect().center().y() == pytest.approx(view.height() / 2.0)
+    assert view._image_rect().center().y() == pytest.approx(view._view_h() / 2.0)
 
 
 def test_zoom_keeps_point_under_cursor_fixed(view):
@@ -115,7 +115,14 @@ def test_drag_does_nothing_at_fit_and_is_clamped_when_zoomed(view):
     mouse(view, QEvent.Type.MouseButtonRelease, 0, 0)
     rect = view._image_rect()
     assert rect.right() == pytest.approx(view.width())      # right edge stops at the border
-    assert rect.bottom() == pytest.approx(view.height())
+    assert rect.bottom() == pytest.approx(view._view_h())   # stops above the hint strip
+
+
+def test_hint_strip_is_reserved_below_the_image(view):
+    from myphotoworks.ui.zoom_view import HINT_H
+
+    assert view._view_h() == view.height() - HINT_H
+    assert view._image_rect().bottom() <= view._view_h()
 
 
 def test_middle_click_resets_zoom_and_position(view):
