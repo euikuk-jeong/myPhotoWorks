@@ -1,0 +1,72 @@
+"""Tests for ThumbnailPanel cards: loop geometry, checkbox hit area, image size cache."""
+import os
+
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+from PIL import Image  # noqa: E402
+from PyQt6.QtCore import QRect, QRectF  # noqa: E402
+
+from myphotoworks.ui.thumbnail_panel import (  # noqa: E402
+    CARD_PAD,
+    THUMB_BOX,
+    ThumbnailPanel,
+    checkbox_rect,
+    pick_loop_path,
+)
+
+
+def test_pick_loop_stays_within_card_padding():
+    photo = QRectF(CARD_PAD + 1, CARD_PAD + 1, THUMB_BOX.width(), THUMB_BOX.height())
+    bounds = pick_loop_path(photo).boundingRect()
+    card = QRectF(0, 0, THUMB_BOX.width() + 2 * (CARD_PAD + 1), THUMB_BOX.height() + 2 * CARD_PAD)
+    assert card.contains(bounds)
+    assert bounds.contains(photo)          # the loop surrounds the photo
+
+
+def test_checkbox_sits_in_photo_top_right_corner():
+    photo = QRect(10, 20, 168, 112)
+    box = checkbox_rect(photo)
+    assert photo.contains(box)
+    assert box.right() > photo.center().x() and box.top() < photo.center().y()
+
+
+def _loaded_panel(qtbot, tmp_path, size=(600, 400)):
+    p = tmp_path / "a.jpg"
+    Image.new("RGB", size, (120, 140, 160)).save(p)
+    panel = ThumbnailPanel()
+    qtbot.addWidget(panel)
+    panel.resize(600, 400)
+    panel.show()
+    panel.add_photos([p])
+    qtbot.waitUntil(lambda: panel.image_size(panel.all_photos()[0]) is not None, timeout=5000)
+    return panel
+
+
+def test_image_size_cached_from_loader(qtbot, tmp_path):
+    panel = _loaded_panel(qtbot, tmp_path, size=(1200, 800))
+    assert panel.image_size(panel.all_photos()[0]) == (1200, 800)
+
+
+def test_portrait_photo_rect_is_narrower_and_centred(qtbot, tmp_path):
+    panel = _loaded_panel(qtbot, tmp_path, size=(400, 600))
+    index = panel.model().index(0, 0)
+    item_rect = panel.visualRect(index)
+    rect = panel.itemDelegate().photo_rect(item_rect, index)
+    assert rect.height() == THUMB_BOX.height() and rect.width() < THUMB_BOX.width()
+    assert abs(rect.center().x() - item_rect.center().x()) <= 1
+
+
+def test_clicking_checkbox_requests_adoption_toggle(qtbot, tmp_path):
+    from PyQt6.QtCore import Qt
+    from PyQt6.QtTest import QTest
+
+    from myphotoworks.models.group_session import GroupSession
+
+    panel = _loaded_panel(qtbot, tmp_path)
+    photo = panel.all_photos()[0]
+    panel.set_session(GroupSession([photo], [[0]], (0.5, 0.3, 0.2)))
+    index = panel.model().index(0, 0)
+    box = checkbox_rect(panel.itemDelegate().photo_rect(panel.visualRect(index), index))
+    with qtbot.waitSignal(panel.adoption_toggle_requested, timeout=1000) as sig:
+        QTest.mouseClick(panel.viewport(), Qt.MouseButton.LeftButton, pos=box.center())
+    assert sig.args == [photo, not photo.is_adopted]

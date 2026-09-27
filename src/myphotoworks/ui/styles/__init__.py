@@ -52,6 +52,13 @@ def load_theme() -> str:
     return render_qss(qss_path.read_text(encoding="utf-8"))
 
 
+def theme_icon(name: str):
+    """QIcon for ``ui/styles/<name>.svg`` (stroked in tokens.TEXT)."""
+    from PyQt6.QtGui import QIcon
+
+    return QIcon(str(_styles_dir() / f"{name}.svg"))
+
+
 def build_palette():
     """Return a QPalette from the tokens.
 
