@@ -1,4 +1,4 @@
-"""PreviewWindow — 3-pane Before / After-A / After-B photo preview."""
+"""PreviewWindow — 3-pane photo preview, each pane with its own correction."""
 from __future__ import annotations
 
 import copy
@@ -50,7 +50,6 @@ from myphotoworks.recipes.builtin_recipes import (
     populate_correction_combo,
 )
 from myphotoworks.ui.exif_panel import ExifPanel
-from myphotoworks.utils.exif_reader import read_exif
 
 # Allow Pillow to load truncated/broken JPEG files instead of raising OSError.
 ImageFile.LOAD_TRUNCATED_IMAGES = True
@@ -68,6 +67,25 @@ _ZOOM_MAX = 20.0
 def _open_image(path: Path) -> Image.Image:
     """Open an image file with EXIF orientation correction applied."""
     return ImageOps.exif_transpose(Image.open(path)).convert("RGB")
+
+
+_PANE_COUNT = 3
+
+
+def initial_pane_settings(base: AppSettings, pane_index: int) -> AppSettings:
+    """Starting settings for a preview pane.
+
+    옵션 1 starts as "보정 없음" (correction off, brightness/contrast 0) so the
+    default layout still shows the original next to two corrected variants;
+    옵션 2/3 start from the main window's settings. All panes are editable.
+    """
+    settings = copy.copy(base)
+    if pane_index == 0:
+        settings.correction_mode = CorrectionMode.NONE
+        settings.recipe_name = ""
+        settings.brightness = 0
+        settings.contrast = 0
+    return settings
 
 
 # ---------------------------------------------------------------------------
@@ -188,67 +206,7 @@ class _ImageView(QWidget):
 
 
 # ---------------------------------------------------------------------------
-# _ExifBar — scrollable EXIF info (Before pane bottom)
-# ---------------------------------------------------------------------------
-
-class _ExifBar(QWidget):
-    """Compact two-column EXIF table shown below the Before pane."""
-
-    _ROWS = [
-        ("파일명",   "filename"),
-        ("크기",    "size"),
-        ("촬영일",   "date"),
-        ("카메라",   "model"),
-        ("셔터",    "shutter"),
-        ("조리개",   "aperture"),
-        ("초점거리",  "focal_length"),
-        ("ISO",    "iso"),
-        ("노출보정",  "exposure_bias"),
-    ]
-
-    def __init__(self, parent=None) -> None:
-        super().__init__(parent)
-        self.setFixedHeight(_BOTTOM_BAR_HEIGHT)
-
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-
-        self._table = QTableWidget(len(self._ROWS), 2)
-        self._table.horizontalHeader().setVisible(False)
-        self._table.horizontalHeader().setSectionResizeMode(
-            0, QHeaderView.ResizeMode.ResizeToContents
-        )
-        self._table.horizontalHeader().setStretchLastSection(True)
-        self._table.verticalHeader().setVisible(False)
-        self._table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-        self._table.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
-        self._table.setAlternatingRowColors(True)
-        self._table.setFrameShape(QFrame.Shape.NoFrame)
-        self._table.setWordWrap(False)
-
-        # Pre-populate row labels
-        for r, (label, _) in enumerate(self._ROWS):
-            key_item = QTableWidgetItem(label)
-            key_item.setFlags(Qt.ItemFlag.ItemIsEnabled)
-            self._table.setItem(r, 0, key_item)
-            val_item = QTableWidgetItem("—")
-            val_item.setFlags(Qt.ItemFlag.ItemIsEnabled)
-            self._table.setItem(r, 1, val_item)
-
-        self._table.resizeRowsToContents()
-        layout.addWidget(self._table)
-
-    def update_photo(self, path: Path) -> None:
-        exif = read_exif(path)
-        for r, (_, key) in enumerate(self._ROWS):
-            raw = exif.get(key, "")
-            if key == "date" and raw:
-                raw = raw.replace(":", "/", 2)
-            self._table.item(r, 1).setText(raw or "—")
-
-
-# ---------------------------------------------------------------------------
-# _EffectsBar — inline color correction settings (After pane bottom)
+# _EffectsBar — inline color correction settings (pane bottom)
 # ---------------------------------------------------------------------------
 
 _RECIPE_ROWS = [
@@ -263,6 +221,7 @@ _RECIPE_ROWS = [
 
 class _EffectsBar(QWidget):
     settings_changed = pyqtSignal()
+    mode_label_changed = pyqtSignal(str)
 
     def __init__(self, settings: AppSettings, parent=None) -> None:
         super().__init__(parent)
@@ -296,7 +255,7 @@ class _EffectsBar(QWidget):
 
         layout.addLayout(form)
 
-        # Recipe info table — styled like _ExifBar, shown only when recipe mode active
+        # Recipe info table — shown only when recipe mode active
         self._recipe_table = QTableWidget(len(_RECIPE_ROWS), 2)
         self._recipe_table.horizontalHeader().setVisible(False)
         self._recipe_table.horizontalHeader().setSectionResizeMode(
@@ -323,6 +282,10 @@ class _EffectsBar(QWidget):
 
         self._sync_mode_combo()
         self._update_recipe_info()
+
+    def mode_label(self) -> str:
+        """Display label of the selected correction mode (e.g. "Auto Level")."""
+        return self._mode_combo.currentText()
 
     def settings(self) -> AppSettings:
         self._settings.brightness = self._brightness_slider.value()
@@ -378,6 +341,7 @@ class _EffectsBar(QWidget):
         self._settings.correction_mode = item.mode
         self._settings.recipe_name = item.recipe_key
         self._update_recipe_info()
+        self.mode_label_changed.emit(self.mode_label())
         self.settings_changed.emit()
 
     def _on_change(self) -> None:
@@ -447,10 +411,10 @@ class _Pane(QWidget):
         layout.setContentsMargins(2, 2, 2, 2)
         layout.setSpacing(2)
 
-        title_lbl = QLabel(title)
-        title_lbl.setObjectName("pane-title")
-        title_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(title_lbl)
+        self._title_lbl = QLabel(title)
+        self._title_lbl.setObjectName("pane-title")
+        self._title_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self._title_lbl)
 
         self.image_view = _ImageView()
         layout.addWidget(self.image_view, stretch=1)
@@ -460,6 +424,9 @@ class _Pane(QWidget):
 
     def set_pixmap(self, pixmap: QPixmap) -> None:
         self.image_view.set_pixmap(pixmap)
+
+    def set_title(self, title: str) -> None:
+        self._title_lbl.setText(title)
 
 
 # ---------------------------------------------------------------------------
@@ -530,11 +497,11 @@ class _PrefetchCache:
 
 
 # ---------------------------------------------------------------------------
-# _RenderWorker — background QRunnable for After-pane rendering
+# _RenderWorker — background QRunnable for pane rendering
 # ---------------------------------------------------------------------------
 
 class _RenderWorkerSignals(QObject):
-    done = _pyqtSignal(object, str, int)  # (QPixmap, pane_id, seq)
+    done = _pyqtSignal(object, int, int)  # (QPixmap, pane_index, seq)
 
 
 class _RenderWorker(QRunnable):
@@ -543,7 +510,7 @@ class _RenderWorker(QRunnable):
         photo: PhotoItem,
         settings: AppSettings,
         source_image,
-        pane_id: str,
+        pane_index: int,
         seq: int,
     ) -> None:
         super().__init__()
@@ -551,7 +518,7 @@ class _RenderWorker(QRunnable):
         self._photo = photo
         self._settings = settings
         self._source = source_image
-        self._pane_id = pane_id
+        self._pane_index = pane_index
         self._seq = seq
         self.signals = _RenderWorkerSignals()
 
@@ -563,17 +530,17 @@ class _RenderWorker(QRunnable):
                 source_image=self._source,
             )
             pixmap = PreviewWindow._pil_to_pixmap(img)
-            self.signals.done.emit(pixmap, self._pane_id, self._seq)
+            self.signals.done.emit(pixmap, self._pane_index, self._seq)
         except Exception:
             logger.debug("[_RenderWorker] render failed", exc_info=True)
 
 
 class PreviewWindow(QMainWindow):
-    """3-pane preview: Before | After-A | After-B.
+    """3-pane preview — each pane has its own correction; title = selected mode.
 
     Keyboard shortcuts
     ------------------
-    1 / 2 / 3       save from respective pane → next
+    1 / 2 / 3       save with respective pane's settings → next
     Space           skip → next
     Del             delete original → next
     ← / ` / →       previous / next photo
@@ -608,20 +575,17 @@ class PreviewWindow(QMainWindow):
         self._cached_preview: Image.Image | None = None  # downsampled for effects
         self._prefetch = _PrefetchCache(preview_max_px=1600)
 
-        # Background render sequencing — discard stale results
-        self._render_seq_a: int = 0
-        self._render_seq_b: int = 0
+        # Background render sequencing per pane — discard stale results
+        self._render_seqs: list[int] = [0] * _PANE_COUNT
 
-        # Debounce timers: fire 150 ms after last settings change
-        self._debounce_a = QTimer(self)
-        self._debounce_a.setSingleShot(True)
-        self._debounce_a.setInterval(150)
-        self._debounce_a.timeout.connect(self._trigger_render_a)
-
-        self._debounce_b = QTimer(self)
-        self._debounce_b.setSingleShot(True)
-        self._debounce_b.setInterval(150)
-        self._debounce_b.timeout.connect(self._trigger_render_b)
+        # Debounce timers per pane: fire 150 ms after last settings change
+        self._debounces: list[QTimer] = []
+        for i in range(_PANE_COUNT):
+            timer = QTimer(self)
+            timer.setSingleShot(True)
+            timer.setInterval(150)
+            timer.timeout.connect(lambda i=i: self._trigger_render(i))
+            self._debounces.append(timer)
 
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self._build_ui()
@@ -640,28 +604,19 @@ class PreviewWindow(QMainWindow):
 
         self._splitter = QSplitter(Qt.Orientation.Horizontal)
 
-        self._exif_bar = _ExifBar()
-        self._before_pane = _Pane("Before (원본)", self._exif_bar)
-        self._before_pane.image_view.view_changed.connect(self._on_view_changed)
-        self._before_pane.image_view.fit_requested.connect(self._on_fit_requested)
-        self._splitter.addWidget(self._before_pane)
-
-        self._effects_bar_a = _EffectsBar(copy.copy(self._base_settings))
-        self._effects_bar_a.settings_changed.connect(self._on_after_a_changed)
-        self._after_a_pane = _Pane("After-A", self._effects_bar_a)
-        self._after_a_pane.image_view.view_changed.connect(self._on_view_changed)
-        self._after_a_pane.image_view.fit_requested.connect(self._on_fit_requested)
-        self._splitter.addWidget(self._after_a_pane)
-
-        self._effects_bar_b = _EffectsBar(copy.copy(self._base_settings))
-        self._effects_bar_b.settings_changed.connect(self._on_after_b_changed)
-        self._after_b_pane = _Pane("After-B", self._effects_bar_b)
-        self._after_b_pane.image_view.view_changed.connect(self._on_view_changed)
-        self._after_b_pane.image_view.fit_requested.connect(self._on_fit_requested)
-        self._splitter.addWidget(self._after_b_pane)
-
-        for i in range(3):
+        self._effects_bars: list[_EffectsBar] = []
+        self._panes: list[_Pane] = []
+        for i in range(_PANE_COUNT):
+            bar = _EffectsBar(initial_pane_settings(self._base_settings, i))
+            bar.settings_changed.connect(self._debounces[i].start)
+            pane = _Pane(bar.mode_label(), bar)
+            bar.mode_label_changed.connect(pane.set_title)
+            pane.image_view.view_changed.connect(self._on_view_changed)
+            pane.image_view.fit_requested.connect(self._on_fit_requested)
+            self._splitter.addWidget(pane)
             self._splitter.setStretchFactor(i, 1)
+            self._effects_bars.append(bar)
+            self._panes.append(pane)
 
         root.addWidget(self._splitter, 1)  # stretch=1 so splitter fills all available height
 
@@ -699,11 +654,11 @@ class PreviewWindow(QMainWindow):
         del_btn.setObjectName("delete-btn")
         action_bar.addWidget(del_btn)
 
-        exif_btn = QPushButton("EXIF\n[E]")
-        exif_btn.setFixedHeight(44)
-        exif_btn.setCheckable(True)
-        exif_btn.toggled.connect(self._toggle_exif)
-        action_bar.addWidget(exif_btn)
+        self._exif_btn = QPushButton("EXIF\n[E]")
+        self._exif_btn.setFixedHeight(44)
+        self._exif_btn.setCheckable(True)
+        self._exif_btn.toggled.connect(self._toggle_exif)
+        action_bar.addWidget(self._exif_btn)
 
         self._next_btn = _btn("다음", "→", self._go_next)
         action_bar.addWidget(self._next_btn)
@@ -715,7 +670,7 @@ class PreviewWindow(QMainWindow):
         status_bar = QStatusBar()
         self.setStatusBar(status_bar)
         hint = QLabel(
-            "1:Before저장(리사이즈만)  2:After-A저장  3:After-B저장  Del:원본삭제  "
+            "1/2/3:해당 옵션으로 저장  Del:원본삭제  "
             "`/←:이전  4/→:다음  E:EXIF  Home:화면맞춤"
         )
         hint.setObjectName("hint-label")
@@ -755,12 +710,12 @@ class PreviewWindow(QMainWindow):
         self._splitter.setSizes([third, third, third])
 
         # Activate each pane's layout immediately so child widget sizes reflect the new split
-        for pane in (self._before_pane, self._after_a_pane, self._after_b_pane):
+        for pane in self._panes:
             if pane.layout():
                 pane.layout().activate()
 
         # Compute minimum fit-zoom across all 3 panes so image fits everywhere
-        panes = (self._before_pane, self._after_a_pane, self._after_b_pane)
+        panes = self._panes
         zoom: float | None = None
         for pane in panes:
             view = pane.image_view
@@ -823,19 +778,9 @@ class PreviewWindow(QMainWindow):
                 )
                 return
 
-        t0 = time.perf_counter()
-        self._exif_bar.update_photo(photo.source_path)
-        logger.debug("[_load_current] EXIF read %.1f ms",
-                     (time.perf_counter() - t0) * 1000)
-
-        t0 = time.perf_counter()
-        self._render_before(photo)
-        logger.debug("[_load_current] render_before %.1f ms",
-                     (time.perf_counter() - t0) * 1000)
-
-        # Kick off background renders for both After panes
-        self._trigger_render_a()
-        self._trigger_render_b()
+        # Kick off background renders for all panes
+        for i in range(_PANE_COUNT):
+            self._trigger_render(i)
 
         # Defer fit so the event loop has processed the new pixmaps
         QTimer.singleShot(0, self._force_fit_all)
@@ -873,16 +818,6 @@ class PreviewWindow(QMainWindow):
             targets.append(self._photos[self._index - 1].source_path)
         self._prefetch.prefetch(targets)
 
-    def _render_before(self, photo: PhotoItem) -> None:
-        try:
-            src = self._cached_preview if self._cached_preview is not None else self._cached_image
-            if src is not None:
-                self._before_pane.set_pixmap(self._pil_to_pixmap(src))
-            else:
-                self._before_pane.set_pixmap(self._pil_to_pixmap(_open_image(photo.source_path)))
-        except Exception:
-            pass
-
     @staticmethod
     def _pil_to_pixmap(img) -> QPixmap:
         data = img.tobytes("raw", "RGB")
@@ -897,7 +832,7 @@ class PreviewWindow(QMainWindow):
     def _on_view_changed(self, zoom: float, offset: QPointF) -> None:
         self._user_has_zoomed = True
         sender_view = self.sender()
-        for pane in (self._before_pane, self._after_a_pane, self._after_b_pane):
+        for pane in self._panes:
             if pane.image_view is not sender_view:
                 pane.image_view.set_view(zoom, offset)
 
@@ -920,51 +855,27 @@ class PreviewWindow(QMainWindow):
             self._load_current()
 
     # ------------------------------------------------------------------
-    # After pane re-render (debounced + background thread)
+    # Pane re-render (debounced + background thread)
     # ------------------------------------------------------------------
 
-    def _on_after_a_changed(self) -> None:
-        self._debounce_a.start()
-
-    def _on_after_b_changed(self) -> None:
-        self._debounce_b.start()
-
-    def _trigger_render_a(self) -> None:
+    def _trigger_render(self, pane_index: int) -> None:
         if not self._photos:
             return
-        self._render_seq_a += 1
-        seq = self._render_seq_a
-        settings = copy.copy(self._effects_bar_a.settings())
+        self._render_seqs[pane_index] += 1
+        seq = self._render_seqs[pane_index]
+        settings = copy.copy(self._effects_bars[pane_index].settings())
         settings.resize_enabled = False
         photo = self._photos[self._index]
         source = self._cached_preview or self._cached_image
-        worker = _RenderWorker(photo, settings, source, "a", seq)
+        worker = _RenderWorker(photo, settings, source, pane_index, seq)
         worker.signals.done.connect(self._on_render_done)
         QThreadPool.globalInstance().start(worker)
 
-    def _trigger_render_b(self) -> None:
-        if not self._photos:
-            return
-        self._render_seq_b += 1
-        seq = self._render_seq_b
-        settings = copy.copy(self._effects_bar_b.settings())
-        settings.resize_enabled = False
-        photo = self._photos[self._index]
-        source = self._cached_preview or self._cached_image
-        worker = _RenderWorker(photo, settings, source, "b", seq)
-        worker.signals.done.connect(self._on_render_done)
-        QThreadPool.globalInstance().start(worker)
-
-    def _on_render_done(self, pixmap, pane_id: str, seq: int) -> None:
+    def _on_render_done(self, pixmap, pane_index: int, seq: int) -> None:
         # Discard result if a newer render has been requested
-        if pane_id == "a":
-            if seq < self._render_seq_a:
-                return
-            self._after_a_pane.set_pixmap(pixmap)
-        else:
-            if seq < self._render_seq_b:
-                return
-            self._after_b_pane.set_pixmap(pixmap)
+        if seq < self._render_seqs[pane_index]:
+            return
+        self._panes[pane_index].set_pixmap(pixmap)
         # Async render may land after _force_fit_all() already ran against
         # stale (previous photo) pixmap dimensions — refit once the new
         # pixmap is in place, unless the user has manually zoomed/panned.
@@ -996,13 +907,13 @@ class PreviewWindow(QMainWindow):
         self._advance()
 
     def _on_save_1(self) -> None:
-        self._save_and_advance(copy.copy(self._base_settings), apply_effects=False)
+        self._save_and_advance(self._effects_bars[0].settings(), apply_effects=True)
 
     def _on_save_2(self) -> None:
-        self._save_and_advance(self._effects_bar_a.settings(), apply_effects=True)
+        self._save_and_advance(self._effects_bars[1].settings(), apply_effects=True)
 
     def _on_save_3(self) -> None:
-        self._save_and_advance(self._effects_bar_b.settings(), apply_effects=True)
+        self._save_and_advance(self._effects_bars[2].settings(), apply_effects=True)
 
     def _on_delete(self) -> None:
         photo = self._photos[self._index]
@@ -1133,16 +1044,7 @@ class PreviewWindow(QMainWindow):
         elif key == Qt.Key.Key_Delete:
             self._on_delete()
         elif key == Qt.Key.Key_E:
-            if self._exif_panel and self._exif_panel.isVisible():
-                self._exif_panel.hide()
-            else:
-                if self._exif_panel is None:
-                    self._exif_panel = ExifPanel(self)
-                self._exif_panel.update_photo(
-                    self._photos[self._index].source_path,
-                    index=self._index + 1, total=len(self._photos),
-                )
-                self._exif_panel.show()
+            self._exif_btn.toggle()
         elif key == Qt.Key.Key_Home:
             self._user_has_zoomed = False
             self._force_fit_all()
