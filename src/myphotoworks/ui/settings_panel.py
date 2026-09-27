@@ -34,6 +34,7 @@ from myphotoworks.recipes.builtin_recipes import (
     build_correction_combo_items,
     populate_correction_combo,
 )
+from myphotoworks.ui.styles import tokens
 
 RESIZE_PRESETS = [1080, 1920, 2048, 2560, 3840]
 
@@ -94,7 +95,7 @@ class SettingsPanel(QTabWidget):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QScrollArea.Shape.NoFrame)
-        scroll.setObjectName("groupScroll")  # styled in glass_theme.qss
+        scroll.setObjectName("groupScroll")  # styled in light_table.qss
         scroll.setWidget(self.group_tab)
         self.addTab(scroll, "그룹")
 
@@ -222,13 +223,14 @@ class SettingsPanel(QTabWidget):
         self._px_spin.setRange(1, 99999)
         self._px_spin.setValue(self._settings.resize_px)
         self._px_spin.setSuffix(" px")
+        self._px_spin.setGroupSeparatorShown(True)
         self._px_spin.valueChanged.connect(self._on_px_changed)
         px_row.addWidget(self._px_spin)
 
         self._preset_combo = QComboBox()
         self._preset_combo.addItem("프리셋")
         for p in RESIZE_PRESETS:
-            self._preset_combo.addItem(str(p))
+            self._preset_combo.addItem(f"{p:,}")
         self._preset_combo.currentIndexChanged.connect(self._on_preset_selected)
         px_row.addWidget(self._preset_combo)
 
@@ -321,7 +323,7 @@ class SettingsPanel(QTabWidget):
         self._quality_spin.setRange(1, 100)
         self._quality_spin.setValue(self._settings.output_quality)
         self._quality_spin.setSuffix(" %")
-        self._quality_spin.setFixedWidth(65)
+        self._quality_spin.setFixedWidth(tokens.SPIN_WIDTH)
         self._quality_spin.valueChanged.connect(self._on_quality_spin)
 
         quality_layout.addWidget(self._quality_slider)
@@ -465,7 +467,7 @@ class _LabeledSlider(QWidget):
         self._spin = QSpinBox()
         self._spin.setRange(minimum, maximum)
         self._spin.setValue(value)
-        self._spin.setFixedWidth(52)
+        self._spin.setFixedWidth(tokens.SPIN_WIDTH)
 
         layout.addWidget(self._slider)
         layout.addWidget(self._spin)

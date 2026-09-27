@@ -380,7 +380,7 @@ class GroupTab(QWidget):
     def set_progress(self, stage: str, current: int, total: int) -> None:
         self._progress.setRange(0, max(1, total))
         self._progress.setValue(current)
-        self._stage_label.setText(f"{stage}… {current} / {total}")
+        self._stage_label.setText(f"{stage}… {current:,} / {total:,}")
 
     def set_done(self, done: bool) -> None:
         self._done = done

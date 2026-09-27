@@ -2,11 +2,11 @@ import logging
 import sys
 from pathlib import Path
 
-from PyQt6.QtGui import QIcon
+from PyQt6.QtGui import QFont, QIcon
 from PyQt6.QtWidgets import QApplication
 
 from myphotoworks.ui.main_window import MainWindow
-from myphotoworks.ui.styles import load_glass_theme
+from myphotoworks.ui.styles import build_palette, load_fonts, load_theme, tokens
 
 
 def _get_resource_path(relative: str) -> Path:
@@ -40,7 +40,13 @@ def main() -> None:
     _set_windows_appid()
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
-    app.setStyleSheet(load_glass_theme())
+    app.setPalette(build_palette())
+    if tokens.FONT_FAMILY in load_fonts():
+        # QPainter text (thumbnail badges, zoom overlay) uses the app font, not QSS
+        font = QFont(tokens.FONT_FAMILY)
+        font.setPointSizeF(9.5)
+        app.setFont(font)
+    app.setStyleSheet(load_theme())
     if _ICON_PATH.exists():
         app.setWindowIcon(QIcon(str(_ICON_PATH)))
     window = MainWindow()

@@ -1,0 +1,643 @@
+/* ============================================================
+   myPhotoWorks — Light Table theme
+   Neutral mid-grey workspace; ochre only marks picks.
+   Colour tokens (at-sign + lower-case name) are resolved from
+   ui/styles/tokens.py at load time.
+   ============================================================ */
+
+/* ------------------------------------------------------------
+   Base
+   ------------------------------------------------------------ */
+QWidget {
+    color: @text;
+    font-family: "IBM Plex Sans KR";
+    font-size: 9.5pt;
+    selection-background-color: @raised;
+    selection-color: @text_strong;
+}
+
+QMainWindow,
+QDialog {
+    background: @ground;
+}
+
+QWidget#centralWidget,
+QStackedWidget,
+QFrame {
+    background: transparent;
+}
+
+/* ------------------------------------------------------------
+   Menus
+   ------------------------------------------------------------ */
+QMenuBar {
+    background: @panel;
+    border-bottom: 1px solid @edge;
+    padding: 2px 4px;
+}
+
+QMenuBar::item {
+    background: transparent;
+    padding: 4px 10px;
+    border-radius: 4px;
+}
+
+QMenuBar::item:selected,
+QMenuBar::item:pressed {
+    background: @raised;
+}
+
+QMenu {
+    background: @panel;
+    border: 1px solid @line;
+    border-radius: 8px;
+    padding: 4px;
+}
+
+QMenu::item {
+    padding: 6px 20px 6px 12px;
+    border-radius: 4px;
+}
+
+QMenu::item:selected {
+    background: @raised;
+    color: @text_strong;
+}
+
+QMenu::item:disabled {
+    color: @text_disabled;
+}
+
+QMenu::separator {
+    height: 1px;
+    background: @divider;
+    margin: 4px 8px;
+}
+
+/* ------------------------------------------------------------
+   QPushButton — outlined secondary by default
+   ------------------------------------------------------------ */
+QPushButton {
+    background: transparent;
+    color: @text;
+    border: 1px solid @line;
+    border-radius: 6px;
+    padding: 5px 12px;
+    min-width: 56px;
+}
+
+QPushButton:hover {
+    background: @raised;
+    border-color: @raised;
+}
+
+QPushButton:pressed {
+    background: @sunken;
+    border-color: @line;
+}
+
+QPushButton:focus {
+    border-color: @text_muted;
+}
+
+QPushButton:disabled {
+    color: @text_disabled;
+    border-color: @divider;
+    background: transparent;
+}
+
+QPushButton:checked {
+    background: @raised;
+    border-color: @raised;
+    color: @text_strong;
+}
+
+/* Primary action — one per window (property primary="true") */
+QPushButton[primary="true"] {
+    background: @primary;
+    color: @on_primary;
+    border: 1px solid @primary;
+    font-weight: 600;
+    padding: 5px 16px;
+}
+
+QPushButton[primary="true"]:hover {
+    background: @text_strong;
+    border-color: @text_strong;
+}
+
+QPushButton[primary="true"]:pressed {
+    background: @text_muted;
+    border-color: @text_muted;
+}
+
+QPushButton[primary="true"]:disabled {
+    background: @raised;
+    border-color: @raised;
+    color: @text_disabled;
+}
+
+/* Small "..." button */
+QPushButton[text="..."] {
+    min-width: 30px;
+    padding: 5px 6px;
+}
+
+/* ------------------------------------------------------------
+   QGroupBox — a titled section, not a card
+   ------------------------------------------------------------ */
+QGroupBox {
+    background: transparent;
+    border: none;
+    border-top: 1px solid @divider;
+    margin-top: 20px;
+    padding: 12px 0 0 0;
+}
+
+QGroupBox::title {
+    subcontrol-origin: margin;
+    subcontrol-position: top left;
+    left: 0px;
+    top: 0px;
+    padding: 0;
+    color: @text_muted;
+    font-size: 9pt;
+    font-weight: 500;
+}
+
+/* ------------------------------------------------------------
+   QTabWidget / QTabBar — text tabs with an underline
+   ------------------------------------------------------------ */
+QTabWidget::pane {
+    background: @panel;
+    border: none;
+    border-top: 1px solid @divider;
+    top: -1px;
+}
+
+QTabWidget::tab-bar {
+    left: 14px;
+}
+
+QTabBar {
+    background: transparent;
+}
+
+QTabBar::tab {
+    background: transparent;
+    color: @text_muted;
+    border: none;
+    border-bottom: 2px solid transparent;
+    padding: 12px 8px 9px 8px;
+    margin-right: 10px;
+    min-width: 40px;
+}
+
+QTabBar::tab:selected {
+    color: @text_strong;
+    border-bottom: 2px solid @primary;
+    font-weight: 600;
+}
+
+QTabBar::tab:hover:!selected {
+    color: @text;
+}
+
+/* ------------------------------------------------------------
+   QSlider
+   ------------------------------------------------------------ */
+QSlider::groove:horizontal {
+    height: 3px;
+    background: @raised;
+    border-radius: 1px;
+}
+
+QSlider::sub-page:horizontal {
+    background: @text_muted;
+    border-radius: 1px;
+}
+
+QSlider::handle:horizontal {
+    background: @primary;
+    border: none;
+    width: 14px;
+    height: 14px;
+    margin: -6px 0;
+    border-radius: 7px;
+}
+
+QSlider::handle:horizontal:hover {
+    background: @text_strong;
+}
+
+QSlider::handle:horizontal:disabled {
+    background: @text_disabled;
+}
+
+/* ------------------------------------------------------------
+   Input fields
+   ------------------------------------------------------------ */
+QDoubleSpinBox,
+QSpinBox,
+QLineEdit,
+QComboBox {
+    background: @field;
+    color: @text;
+    border: 1px solid @line;
+    border-radius: 6px;
+    padding: 4px 8px;
+    min-height: 20px;
+}
+
+QDoubleSpinBox:focus,
+QSpinBox:focus,
+QLineEdit:focus,
+QComboBox:focus {
+    border-color: @text_muted;
+}
+
+QDoubleSpinBox:disabled,
+QSpinBox:disabled,
+QLineEdit:disabled,
+QComboBox:disabled {
+    color: @text_disabled;
+    border-color: @divider;
+    background: transparent;
+}
+
+QDoubleSpinBox,
+QSpinBox {
+    padding: 4px 4px 4px 8px;
+}
+
+QDoubleSpinBox::up-button,
+QSpinBox::up-button,
+QDoubleSpinBox::down-button,
+QSpinBox::down-button {
+    subcontrol-origin: border;
+    background: transparent;
+    border: none;
+    border-left: 1px solid @line;
+    width: 18px;
+}
+
+QDoubleSpinBox::up-button,
+QSpinBox::up-button {
+    subcontrol-position: top right;
+    border-top-right-radius: 6px;
+}
+
+QDoubleSpinBox::down-button,
+QSpinBox::down-button {
+    subcontrol-position: bottom right;
+    border-bottom-right-radius: 6px;
+}
+
+QDoubleSpinBox::up-button:hover,
+QSpinBox::up-button:hover,
+QDoubleSpinBox::down-button:hover,
+QSpinBox::down-button:hover {
+    background: @raised;
+}
+
+QDoubleSpinBox::up-arrow,
+QSpinBox::up-arrow {
+    image: url("@styles_dir/chevron-up.svg");
+    width: 10px;
+    height: 10px;
+}
+
+QDoubleSpinBox::down-arrow,
+QSpinBox::down-arrow {
+    image: url("@styles_dir/chevron-down-small.svg");
+    width: 10px;
+    height: 10px;
+}
+
+QDoubleSpinBox::up-arrow:disabled,
+QSpinBox::up-arrow:disabled,
+QDoubleSpinBox::down-arrow:disabled,
+QSpinBox::down-arrow:disabled {
+    image: none;
+}
+
+QComboBox::drop-down {
+    border: none;
+    width: 22px;
+}
+
+QComboBox::down-arrow {
+    image: url("@styles_dir/chevron-down.svg");
+    width: 12px;
+    height: 12px;
+}
+
+QComboBox QAbstractItemView {
+    background: @panel;
+    border: 1px solid @line;
+    border-radius: 6px;
+    selection-background-color: @raised;
+    color: @text;
+    outline: none;
+}
+
+/* ------------------------------------------------------------
+   QCheckBox / QRadioButton
+   ------------------------------------------------------------ */
+QCheckBox,
+QRadioButton {
+    color: @text;
+    spacing: 7px;
+}
+
+QCheckBox::indicator,
+QRadioButton::indicator {
+    width: 14px;
+    height: 14px;
+    border: 1px solid @text_muted;
+    background: transparent;
+}
+
+QCheckBox::indicator {
+    border-radius: 3px;
+}
+
+QRadioButton::indicator {
+    border-radius: 7px;
+}
+
+QCheckBox::indicator:checked,
+QRadioButton::indicator:checked {
+    background: @primary;
+    border-color: @primary;
+}
+
+QCheckBox::indicator:checked {
+    image: url("@styles_dir/check.svg");
+}
+
+QCheckBox:disabled,
+QRadioButton:disabled {
+    color: @text_disabled;
+}
+
+QCheckBox::indicator:disabled,
+QRadioButton::indicator:disabled {
+    border-color: @text_disabled;
+}
+
+/* ------------------------------------------------------------
+   QLabel
+   ------------------------------------------------------------ */
+QLabel {
+    background: transparent;
+    color: @text;
+}
+
+QLabel[class="title-label"],
+QLabel#pane-title {
+    background: transparent;
+    border: none;
+    color: @text_strong;
+    font-weight: 500;
+    padding: 3px 2px;
+}
+
+QLabel#hint-label {
+    color: @text_muted;
+    font-size: 8.5pt;
+}
+
+QLabel a {
+    color: @text_strong;
+}
+
+/* ------------------------------------------------------------
+   QSplitter
+   ------------------------------------------------------------ */
+QSplitter::handle {
+    background: @edge;
+}
+
+QSplitter::handle:horizontal {
+    width: 1px;
+}
+
+QSplitter::handle:vertical {
+    height: 1px;
+}
+
+QSplitter::handle:hover {
+    background: @text_muted;
+}
+
+/* ------------------------------------------------------------
+   QStatusBar
+   ------------------------------------------------------------ */
+QStatusBar {
+    background: @panel;
+    border-top: 1px solid @edge;
+    color: @text_muted;
+    font-size: 9pt;
+    padding-left: 10px;
+}
+
+QStatusBar QLabel {
+    color: @text_muted;
+}
+
+QStatusBar::item {
+    border: none;
+}
+
+/* ------------------------------------------------------------
+   QProgressBar
+   ------------------------------------------------------------ */
+QProgressBar {
+    background: @raised;
+    border: none;
+    border-radius: 2px;
+    max-height: 4px;
+    text-align: center;
+    color: transparent;
+}
+
+QProgressBar::chunk {
+    background: @primary;
+    border-radius: 2px;
+}
+
+/* ------------------------------------------------------------
+   QListWidget — thumbnails sit directly on the workspace
+   ------------------------------------------------------------ */
+QListWidget {
+    background: @ground;
+    border: none;
+    outline: none;
+}
+
+QListWidget::item {
+    color: @text_muted;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    padding: 2px;
+}
+
+/* Same treatment as a selected group card in the review window */
+QListWidget::item:selected {
+    background: @raised;
+    border: 1px solid @text_muted;
+    color: @text_strong;
+}
+
+QListWidget::item:hover:!selected {
+    background: @divider;
+}
+
+/* ------------------------------------------------------------
+   QTableWidget — EXIF panel
+   ------------------------------------------------------------ */
+QTableWidget {
+    background: transparent;
+    alternate-background-color: @panel;
+    border: none;
+    gridline-color: @divider;
+    color: @text;
+    outline: none;
+}
+
+QTableWidget::item {
+    padding: 3px 6px;
+    border: none;
+}
+
+QTableWidget::item:selected {
+    background: @raised;
+    color: @text_strong;
+}
+
+QHeaderView {
+    background: transparent;
+}
+
+QHeaderView::section {
+    background: @panel;
+    color: @text_muted;
+    border: none;
+    border-bottom: 1px solid @divider;
+    padding: 4px 6px;
+    font-weight: 500;
+}
+
+/* ------------------------------------------------------------
+   QScrollBar — thin, appears as a quiet grey rail
+   ------------------------------------------------------------ */
+QScrollBar:vertical {
+    background: transparent;
+    width: 10px;
+    margin: 2px;
+}
+
+QScrollBar::handle:vertical {
+    background: @line;
+    border-radius: 3px;
+    min-height: 24px;
+}
+
+QScrollBar::handle:vertical:hover {
+    background: @text_disabled;
+}
+
+QScrollBar::add-line:vertical,
+QScrollBar::sub-line:vertical,
+QScrollBar::add-page:vertical,
+QScrollBar::sub-page:vertical {
+    height: 0px;
+    background: transparent;
+}
+
+QScrollBar:horizontal {
+    background: transparent;
+    height: 10px;
+    margin: 2px;
+}
+
+QScrollBar::handle:horizontal {
+    background: @line;
+    border-radius: 3px;
+    min-width: 24px;
+}
+
+QScrollBar::handle:horizontal:hover {
+    background: @text_disabled;
+}
+
+QScrollBar::add-line:horizontal,
+QScrollBar::sub-line:horizontal,
+QScrollBar::add-page:horizontal,
+QScrollBar::sub-page:horizontal {
+    width: 0px;
+    background: transparent;
+}
+
+/* ------------------------------------------------------------
+   Dialog buttons
+   ------------------------------------------------------------ */
+QDialogButtonBox QPushButton {
+    min-width: 72px;
+}
+
+/* Destructive button (objectName="delete-btn") */
+QPushButton#delete-btn {
+    color: @danger;
+    border-color: @line;
+}
+
+QPushButton#delete-btn:hover {
+    background: @danger;
+    border-color: @danger;
+    color: @text_strong;
+}
+
+/* Preview window bottom action bar */
+QWidget#preview-action-bar {
+    background: @panel;
+    border-top: 1px solid @edge;
+}
+
+/* ------------------------------------------------------------
+   Group tab scroll area (viewport only — not propagated to children)
+   ------------------------------------------------------------ */
+QScrollArea#groupScroll {
+    background: transparent;
+    border: none;
+}
+
+QScrollArea#groupScroll > QWidget > QWidget {
+    background: transparent;
+}
+
+/* ------------------------------------------------------------
+   QToolTip
+   ------------------------------------------------------------ */
+QToolTip {
+    background-color: @sunken;
+    color: @text;
+    border: 1px solid @line;
+    border-radius: 4px;
+    padding: 5px 7px;
+}
+
+/* ------------------------------------------------------------
+   QToolButton — collapsible headers etc. (text only)
+   ------------------------------------------------------------ */
+QToolButton {
+    background: transparent;
+    color: @text;
+    border: none;
+    padding: 2px 2px;
+}
+
+QToolButton:hover {
+    color: @text_strong;
+}

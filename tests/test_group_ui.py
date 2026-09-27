@@ -88,6 +88,23 @@ def test_initial_state_no_grouping_controls(window):
     assert window._process_btn.text() == "일괄 적용 (6장)"
 
 
+def test_group_summary_text_uses_thousands_separator():
+    from myphotoworks.ui.group_review_window import GroupSummary
+
+    s = GroupSummary(number=1000, count=1234, adopted=1001, span="", tag="미확인", cover=None)
+    assert s.text == "그룹 1,000 · 1,234장 · 채택 1,001  [미확인]"
+
+
+def test_slider_spin_box_fits_three_digit_negative(qtbot):
+    from myphotoworks.ui.settings_panel import _LabeledSlider
+    from myphotoworks.ui.styles import tokens
+
+    w = _LabeledSlider(-100, 100, -100)
+    qtbot.addWidget(w)
+    assert w._spin.width() == tokens.SPIN_WIDTH
+    assert w._spin.text() == "-100"
+
+
 def test_grouping_flow_and_adopted_filter_drive_process_scope(window, qtbot):
     run_grouping(window, qtbot)
     assert window._session.group_count() == 4
@@ -338,10 +355,10 @@ def test_no_widget_level_stylesheet_leaks_into_children(window):
     assert window._settings_panel.group_tab.styleSheet() == ""
 
 
-def test_theme_defines_dark_tooltip_and_group_scroll_rules():
-    from myphotoworks.ui.styles import load_glass_theme
+def test_theme_defines_tooltip_and_group_scroll_rules():
+    from myphotoworks.ui.styles import load_theme
 
-    qss = load_glass_theme()
+    qss = load_theme()
     assert "QToolTip" in qss and "QScrollArea#groupScroll" in qss
 
 
@@ -500,3 +517,116 @@ def test_review_merge_up_and_down_leave_one_adopted_recommendation(window, qtbot
     assert len(merged.photos) == 5
     assert sum(p.is_adopted for p in merged.photos) == 1
     assert window._process_btn.text().startswith("일괄 적용")
+
+
+def _many_groups_review(qtbot, tmp_path, n=30):
+    from myphotoworks.core.scoring import QualityScores
+    from myphotoworks.models.group_session import GroupSession
+    from myphotoworks.models.photo_item import PhotoItem
+    from myphotoworks.ui.group_review_window import GroupReviewWindow
+
+    photos = []
+    for i in range(n * 2):
+        p = tmp_path / f"g_{i:02d}.jpg"
+        scene(i % 5).resize((40, 30)).save(p, "JPEG")
+        item = PhotoItem(p)
+        item.scores = QualityScores(50 + i, 60, 60)
+        photos.append(item)
+    session = GroupSession(photos, [[2 * k, 2 * k + 1] for k in range(n)], (0.5, 0.3, 0.2))
+    win = GroupReviewWindow(session, AppSettings())
+    qtbot.addWidget(win)
+    win.resize(1100, 720)
+    win.show()
+    qtbot.wait(100)
+    return win, session
+
+
+def test_time_span_formats_single_and_range(tmp_path):
+    from datetime import datetime
+    from types import SimpleNamespace
+
+    from myphotoworks.models.photo_item import PhotoItem
+    from myphotoworks.ui.group_review_window import time_span
+
+    def photo(t):
+        p = PhotoItem(tmp_path / "x.jpg")
+        p.analysis = SimpleNamespace(taken=t)
+        return p
+
+    t1, t2 = datetime(2026, 1, 1, 9, 12, 0), datetime(2026, 1, 1, 9, 14, 5)
+    assert time_span([]) == ""
+    assert time_span([photo(None), PhotoItem(tmp_path / "y.jpg")]) == ""
+    assert time_span([photo(t1)]) == "09:12:00"
+    assert time_span([photo(t2), photo(t1)]) == "09:12:00 – 09:14:05"
+
+
+def test_group_summary_uses_recommended_cover_and_counts(tmp_path):
+    from myphotoworks.core.scoring import QualityScores
+    from myphotoworks.models.group_session import TAG_EDITED, TAG_TODO, GroupSession
+    from myphotoworks.models.photo_item import PhotoItem
+    from myphotoworks.ui.group_review_window import group_summary
+
+    photos = [PhotoItem(tmp_path / f"{i}.jpg") for i in range(3)]
+    for p, s in zip(photos, (40, 90, 60), strict=True):
+        p.scores = QualityScores(s, s, s)
+    session = GroupSession(photos, [[0, 1, 2]], (0.5, 0.3, 0.2))
+    g = session.groups()[0]
+    s = group_summary(session, g, 4)
+    assert (s.number, s.count, s.adopted, s.tag) == (4, 3, 1, TAG_TODO)
+    assert s.cover is photos[1]
+    assert s.text == f"그룹 4 · 3장 · 채택 1  [{TAG_TODO}]"
+    session.adopt_all(g.id)
+    s = group_summary(session, session.groups()[0], 4)
+    assert (s.adopted, s.tag) == (3, TAG_EDITED)
+
+
+def test_group_summary_without_recommendation_uses_first_photo(tmp_path):
+    from myphotoworks.models.group_session import GroupSession
+    from myphotoworks.models.photo_item import PhotoItem
+    from myphotoworks.ui.group_review_window import group_summary
+
+    photos = [PhotoItem(tmp_path / f"{i}.jpg") for i in range(2)]   # never analysed
+    session = GroupSession(photos, [[0, 1]], (0.5, 0.3, 0.2))
+    assert group_summary(session, session.groups()[0], 1).cover is photos[0]
+
+
+def test_review_selecting_group_keeps_list_items_and_scroll(qtbot, tmp_path):
+    win, session = _many_groups_review(qtbot, tmp_path)
+    lst = win._group_list
+    bar = lst.verticalScrollBar()
+    assert bar.maximum() > 0
+    bar.setValue(bar.maximum() // 2)
+    pos = bar.value()
+    row = lst.row(lst.itemAt(lst.viewport().rect().center()))
+    items = [lst.item(i) for i in range(lst.count())]
+    target = session.groups()[row].id
+    lst.setCurrentRow(row)
+    qtbot.waitUntil(lambda: win._gid == target, timeout=3000)
+    qtbot.wait(50)
+    assert bar.value() == pos                                       # list did not jump
+    assert [lst.item(i) for i in range(lst.count())] == items       # updated in place
+    assert lst.currentRow() == row
+    assert lst.item(row).data(Qt.ItemDataRole.UserRole + 1).tag != "미확인"
+
+
+def test_review_group_edit_rebuilds_list_but_keeps_scroll(qtbot, tmp_path):
+    win, session = _many_groups_review(qtbot, tmp_path)
+    lst = win._group_list
+    bar = lst.verticalScrollBar()
+    bar.setValue(bar.maximum() // 2)
+    row = lst.row(lst.itemAt(lst.viewport().rect().center()))
+    lst.setCurrentRow(row)
+    qtbot.waitUntil(lambda: win._gid == session.groups()[row].id, timeout=3000)
+    pos = bar.value()
+    win._merge_down.click()                                         # one group fewer
+    assert lst.count() == session.group_count() == 29
+    assert bar.value() == pos
+    assert lst.currentItem().data(Qt.ItemDataRole.UserRole) == win._gid
+    assert lst.visualItemRect(lst.currentItem()).intersects(lst.viewport().rect())
+
+
+def test_review_group_card_paints_without_error(qtbot, tmp_path):
+    win, _ = _many_groups_review(qtbot, tmp_path, n=3)
+    lst = win._group_list
+    assert lst.visualItemRect(lst.item(0)).height() >= 60           # card rows, not text rows
+    assert not lst.grab().isNull()

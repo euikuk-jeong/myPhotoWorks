@@ -14,7 +14,6 @@ from PyQt6.QtGui import (
     QColor,
     QImage,
     QKeyEvent,
-    QLinearGradient,
     QPainter,
     QPixmap,
     QWheelEvent,
@@ -50,6 +49,7 @@ from myphotoworks.recipes.builtin_recipes import (
     populate_correction_combo,
 )
 from myphotoworks.ui.exif_panel import ExifPanel
+from myphotoworks.ui.styles import tokens
 
 # Allow Pillow to load truncated/broken JPEG files instead of raising OSError.
 ImageFile.LOAD_TRUNCATED_IMAGES = True
@@ -111,7 +111,7 @@ class _ImageView(QWidget):
         self.setCursor(Qt.CursorShape.OpenHandCursor)
         self.setAutoFillBackground(True)
         palette = self.palette()
-        palette.setColor(palette.ColorRole.Window, QColor(15, 20, 30))
+        palette.setColor(palette.ColorRole.Window, QColor(tokens.GROUND))
         self.setPalette(palette)
 
         self._pixmap: QPixmap | None = None
@@ -367,7 +367,7 @@ class _MiniSlider(QWidget):
         self._spin = QSpinBox()
         self._spin.setRange(minimum, maximum)
         self._spin.setValue(value)
-        self._spin.setFixedWidth(48)
+        self._spin.setFixedWidth(tokens.SPIN_WIDTH)
 
         layout.addWidget(self._slider)
         layout.addWidget(self._spin)
@@ -622,15 +622,7 @@ class PreviewWindow(QMainWindow):
 
         # Action button bar — wrapped in a container widget for distinct background
         action_widget = QWidget()
-        action_widget.setObjectName("preview-action-bar")
-        action_widget.setStyleSheet(
-            "#preview-action-bar {"
-            "  background: qlineargradient(x1:0,y1:0,x2:0,y2:1,"
-            "    stop:0 #1a2d4a, stop:1 #0f1e33);"
-            "  border-top: 1px solid rgba(100,160,255,0.18);"
-            "  border-radius: 0px;"
-            "}"
-        )
+        action_widget.setObjectName("preview-action-bar")  # styled in light_table.qss
         action_bar = QHBoxLayout(action_widget)
         action_bar.setContentsMargins(8, 6, 8, 6)
         action_bar.setSpacing(6)
@@ -679,14 +671,6 @@ class PreviewWindow(QMainWindow):
     # ------------------------------------------------------------------
     # Show / resize events
     # ------------------------------------------------------------------
-
-    def paintEvent(self, event) -> None:  # noqa: N802
-        painter = QPainter(self)
-        gradient = QLinearGradient(0, 0, 0, self.height())
-        gradient.setColorAt(0.0, QColor("#0d1117"))
-        gradient.setColorAt(0.5, QColor("#161b22"))
-        gradient.setColorAt(1.0, QColor("#1c2333"))
-        painter.fillRect(self.rect(), gradient)
 
     def showEvent(self, event) -> None:  # noqa: N802
         super().showEvent(event)
@@ -744,7 +728,7 @@ class PreviewWindow(QMainWindow):
         t_total = time.perf_counter()
         photo = self._photos[self._index]
         total = len(self._photos)
-        self.setWindowTitle(f"미리보기  {self._index + 1}/{total}  —  {photo.source_path.name}")
+        self.setWindowTitle(f"미리보기  {self._index + 1:,}/{total:,}  —  {photo.source_path.name}")
         self._prev_btn.setEnabled(self._index > 0)
         self._next_btn.setEnabled(self._index < total - 1)
 
@@ -969,7 +953,7 @@ class PreviewWindow(QMainWindow):
                 self,
                 "미리보기 완료",
                 f"모든 사진을 검토했습니다.\n\n"
-                f"전체 {total}개 중 {self._saved_count}개가 저장되었습니다.",
+                f"전체 {total:,}개 중 {self._saved_count:,}개가 저장되었습니다.",
             )
 
     def _resolve_output_path(self, photo: PhotoItem, settings: AppSettings) -> Path:

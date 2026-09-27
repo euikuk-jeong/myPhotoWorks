@@ -29,13 +29,14 @@ from PyQt6.QtWidgets import (
 )
 
 from myphotoworks.models.photo_item import PhotoItem, ProcessStatus
+from myphotoworks.ui.styles import tokens
 
 THUMBNAIL_SIZE = 80
 SUPPORTED_EXTS = {".jpg", ".jpeg", ".png", ".tif", ".tiff", ".bmp", ".webp"}
 
 _PHOTO_ROLE = Qt.ItemDataRole.UserRole
-_ACCENT = QColor("#58a6ff")
-_STAR = QColor("#f5c451")
+_ACCENT = QColor(tokens.PICK)
+_STAR = QColor(tokens.PICK)
 
 
 def checkbox_rect(item_rect: QRect) -> QRect:
@@ -92,11 +93,11 @@ class _CardDelegate(QStyledItemDelegate):
             painter.drawRoundedRect(r.adjusted(1, 1, -1, -1), 6, 6)
 
         box = checkbox_rect(r)
-        painter.setPen(QPen(QColor("#e6edf3"), 1))
-        painter.setBrush(_ACCENT if photo.is_adopted else QColor(13, 17, 23, 180))
+        painter.setPen(QPen(QColor(tokens.TEXT), 1))
+        painter.setBrush(_ACCENT if photo.is_adopted else tokens.color(tokens.PANEL, 200))
         painter.drawRoundedRect(box, 3, 3)
         if photo.is_adopted:
-            painter.setPen(QPen(QColor("#0d1117"), 2))
+            painter.setPen(QPen(QColor(tokens.ON_PRIMARY), 2))
             painter.drawLine(box.left() + 4, box.center().y(), box.left() + 7, box.bottom() - 4)
             painter.drawLine(box.left() + 7, box.bottom() - 4, box.right() - 3, box.top() + 4)
 
@@ -115,17 +116,17 @@ class _CardDelegate(QStyledItemDelegate):
             text = str(round(composite(photo.scores, self._panel.weights)))
             badge = QRect(r.right() - 30, r.top() + self._panel.icon_px - 8, 26, 16)
             painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(QColor(13, 17, 23, 205))
+            painter.setBrush(tokens.color(tokens.PANEL, 215))
             painter.drawRoundedRect(badge, 4, 4)
-            painter.setPen(QColor("#e6edf3"))
+            painter.setPen(QColor(tokens.TEXT))
             painter.drawText(badge, Qt.AlignmentFlag.AlignCenter, text)
 
         if "흐림" in photo.reason:
             badge = QRect(r.left() + 6, r.top() + self._panel.icon_px - 8, 32, 16)
             painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(QColor(210, 153, 34, 230))
+            painter.setBrush(tokens.color(tokens.WARN, 230))
             painter.drawRoundedRect(badge, 4, 4)
-            painter.setPen(QColor("#0d1117"))
+            painter.setPen(QColor(tokens.ON_PRIMARY))
             painter.drawText(badge, Qt.AlignmentFlag.AlignCenter, "흐림")
         painter.restore()
 
@@ -309,15 +310,15 @@ class ThumbnailPanel(QListWidget):
                 for p in shown:
                     yield "photo", p
         if singles:
-            yield "header", f"단독 사진 · {len(singles)}장"
+            yield "header", f"단독 사진 · {len(singles):,}장"
             for p in singles:
                 yield "photo", p
 
     def _group_title(self, group, shown: int) -> str:
         n = len(group.photos)
-        title = f"그룹 {self._group_number(group.id)} · {n}장"
+        title = f"그룹 {self._group_number(group.id):,} · {n:,}장"
         if shown != n:
-            title += f" 중 {shown}장 표시"
+            title += f" 중 {shown:,}장 표시"
         times = sorted(
             p.analysis.taken for p in group.photos if p.analysis and p.analysis.taken
         )

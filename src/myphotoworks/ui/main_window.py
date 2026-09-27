@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QColor, QKeySequence, QLinearGradient, QPainter, QShortcut
+from PyQt6.QtGui import QKeySequence, QShortcut
 from PyQt6.QtWidgets import (
     QButtonGroup,
     QCheckBox,
@@ -305,7 +305,7 @@ class MainWindow(QMainWindow):
 
     def _on_progress(self, current: int, total: int) -> None:
         self._progress_bar.setValue(current)
-        self._status_label.setText(f"처리 중... {current} / {total}")
+        self._status_label.setText(f"처리 중... {current:,} / {total:,}")
 
     def _on_process_finished(self) -> None:
         self._progress_bar.setVisible(False)
@@ -314,12 +314,12 @@ class MainWindow(QMainWindow):
         total = len(photos)
         from myphotoworks.models.photo_item import ProcessStatus
         saved = sum(1 for p in photos if p.status == ProcessStatus.DONE)
-        self._status_label.setText(f"완료: {total}장 중 {saved}장 저장됨")
+        self._status_label.setText(f"완료: {total:,}장 중 {saved:,}장 저장됨")
         self._update_buttons()
         QMessageBox.information(
             self,
             "일괄 적용 완료",
-            f"처리가 완료되었습니다.\n\n전체 {total}개 중 {saved}개가 저장되었습니다.",
+            f"처리가 완료되었습니다.\n\n전체 {total:,}개 중 {saved:,}개가 저장되었습니다.",
         )
 
     def _on_process_error(self, msg: str) -> None:
@@ -365,7 +365,7 @@ class MainWindow(QMainWindow):
             self._thumb_panel.rebuild()
             self._update_buttons()
             self._status_label.setText(
-                f"추가한 {self._session.added_count()}장은 그룹핑 전입니다. "
+                f"추가한 {self._session.added_count():,}장은 그룹핑 전입니다. "
                 "다시 그룹핑하면 그룹에 포함됩니다."
             )
             return
@@ -428,11 +428,11 @@ class MainWindow(QMainWindow):
         self._set_grouping_controls(True)
         self._group_view_btn.setChecked(True)
         summary = (
-            f"{len(session.photos_flat())}장 → {session.group_count()}개 그룹\n"
-            f"단독 {session.single_count()}장 · 채택 {session.adopted_count()}장 · "
-            f"검토 완료 {session.reviewed_count()} / {session.group_count()}"
+            f"{len(session.photos_flat()):,}장 → {session.group_count():,}개 그룹\n"
+            f"단독 {session.single_count():,}장 · 채택 {session.adopted_count():,}장 · "
+            f"검토 완료 {session.reviewed_count():,} / {session.group_count():,}"
         )
-        warning = f"촬영 시각 없음 {result.no_time_count}장" if result.no_time_count else ""
+        warning = f"촬영 시각 없음 {result.no_time_count:,}장" if result.no_time_count else ""
         self._settings_panel.group_tab.show_result(summary, result.message, warning)
         self._apply_view()
 
@@ -478,7 +478,7 @@ class MainWindow(QMainWindow):
         self._session.rescore(self._settings.weights())
         self._check_stale_scores()
         self._on_review_changed()
-        self._status_label.setText(f"노출·색감 점수를 다시 계산했습니다. ({count}장)")
+        self._status_label.setText(f"노출·색감 점수를 다시 계산했습니다. ({count:,}장)")
 
     def _on_rescore_thread_finished(self) -> None:
         worker, self._rescore_worker = self._rescore_worker, None
@@ -542,16 +542,16 @@ class MainWindow(QMainWindow):
         self._clear_btn.setEnabled(has_photos)
         self._preview_btn.setEnabled(shown > 0)
         self._process_btn.setEnabled(shown > 0)
-        self._process_btn.setText(f"일괄 적용 ({shown}장)" if shown else "일괄 적용")
+        self._process_btn.setText(f"일괄 적용 ({shown:,}장)" if shown else "일괄 적용")
         self._settings_panel.group_tab.set_has_photos(has_photos)
         if self._session is not None:
             self._status_label.setText(
-                f"표시 {shown}장 / 전체 {total}장 · {self._session.group_count()}그룹 · "
-                f"채택 {self._session.adopted_count()}장"
+                f"표시 {shown:,}장 / 전체 {total:,}장 · {self._session.group_count():,}그룹 · "
+                f"채택 {self._session.adopted_count():,}장"
                 + (" · 채택만 보기" if self._adopted_only_cb.isChecked() else "")
             )
         elif has_photos:
-            self._status_label.setText(f"{total}장 로드됨")
+            self._status_label.setText(f"{total:,}장 로드됨")
         else:
             self._status_label.setText("사진을 추가하세요.")
 
@@ -608,14 +608,6 @@ class MainWindow(QMainWindow):
             except Exception:
                 pass
         return False, 0
-
-    def paintEvent(self, event) -> None:  # noqa: N802
-        painter = QPainter(self)
-        gradient = QLinearGradient(0, 0, 0, self.height())
-        gradient.setColorAt(0.0, QColor("#0d1117"))
-        gradient.setColorAt(0.5, QColor("#161b22"))
-        gradient.setColorAt(1.0, QColor("#1c2333"))
-        painter.fillRect(self.rect(), gradient)
 
     def closeEvent(self, event) -> None:  # noqa: N802
         self._cfg["window_geometry"] = self.saveGeometry().toHex().data().decode()

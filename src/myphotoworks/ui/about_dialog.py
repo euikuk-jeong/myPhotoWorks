@@ -6,7 +6,7 @@ from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QColor, QLinearGradient, QPainter, QPixmap
+from PyQt6.QtGui import QPixmap
 from PyQt6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
@@ -93,12 +93,3 @@ class AboutDialog(QDialog):
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok)
         buttons.accepted.connect(self.accept)
         layout.addWidget(buttons)
-
-    def paintEvent(self, event) -> None:  # noqa: N802
-        painter = QPainter(self)
-        gradient = QLinearGradient(0, 0, 0, self.height())
-        gradient.setColorAt(0.0, QColor("#161b22"))
-        gradient.setColorAt(1.0, QColor("#1c2333"))
-        painter.fillRect(self.rect(), gradient)
-        painter.setPen(QColor(255, 255, 255, 46))
-        painter.drawRoundedRect(self.rect().adjusted(0, 0, -1, -1), 8, 8)

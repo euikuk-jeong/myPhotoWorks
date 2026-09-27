@@ -56,6 +56,11 @@ def test_trust_missing_times_untrusted():
     assert not judge_time_trust([]).trusted
 
 
+def test_trust_reason_uses_thousands_separator():
+    reason = judge_time_trust([None] * 1200 + [sec(0), sec(5)]).reason
+    assert "1,202장 중 2장만" in reason
+
+
 def test_trust_mostly_one_timestamp_untrusted():
     times = [sec(0)] * 8 + [sec(5), sec(9)]
     assert not judge_time_trust(times).trusted
