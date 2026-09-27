@@ -205,7 +205,7 @@ class MainWindow(QMainWindow):
 
         root.addWidget(splitter, 1)
 
-        # --- Status bar: counts | adopted (ochre) ...... selected file ---
+        # --- Status bar: counts | adopted (pick colour) ...... selected file ---
         status_bar = QStatusBar()
         status_bar.setSizeGripEnabled(False)
         self.setStatusBar(status_bar)
@@ -279,9 +279,9 @@ class MainWindow(QMainWindow):
             self._file_label.clear()
             return
         size = self._thumb_panel.image_size(photo)
-        text = photo.source_path.name
+        text = f"[{photo.source_path.name}]"
         if size is not None:
-            text += f"    {size[0]:,} × {size[1]:,}"
+            text += f"  해상도: {size[0]:,} x {size[1]:,}"
         self._file_label.setText(text)
 
     def _on_photo_double_clicked(self, photo: PhotoItem) -> None:

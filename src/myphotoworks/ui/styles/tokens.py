@@ -1,7 +1,7 @@
 """Light Table design tokens.
 
 Neutral mid-grey workspace so the UI never tints how a photo's colour reads.
-Ochre (china-marker) is reserved for picks (adopted / recommended) — nothing else.
+Sage green is reserved for picks (adopted / recommended) — nothing else.
 The same names are substituted into ``light_table.qss`` as ``@name``.
 """
 from __future__ import annotations
@@ -25,11 +25,11 @@ TEXT_DISABLED = "#6c6c72"
 PRIMARY = "#ececee"         # primary button fill, slider handle, focus
 ON_PRIMARY = "#1d1d1f"
 
-PICK = "#cfa54f"            # ochre china-marker: adopted / recommended marks
-PICK_TEXT = "#d8b366"       # ochre text on dark surfaces (contrast-safe)
+PICK = "#8db596"            # sage: adopted / recommended marks
+PICK_TEXT = "#9fc4a7"       # sage text on dark surfaces (contrast-safe)
 WARN = "#b9794b"            # soft warnings such as the blur badge (rust, apart from PICK)
 DANGER = "#d0655c"          # destructive actions such as deleting an original
-OK = "#5fb36f"              # completed state such as the "reviewed" group tag
+OK = "#8aa4c8"              # completed state such as the "reviewed" group tag (apart from PICK)
 
 FONT_FAMILY = "IBM Plex Sans KR"
 SPIN_WIDTH = 76             # numeric spin boxes: fits "-100" plus the up/down buttons

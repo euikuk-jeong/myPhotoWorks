@@ -78,6 +78,19 @@ def test_portrait_photo_rect_is_narrower_and_centred(qtbot, tmp_path):
     assert abs(rect.center().x() - item_rect.center().x()) <= 1
 
 
+def test_landscape_photo_in_square_box_is_pinned_to_top(qtbot, tmp_path):
+    """Review strip uses a square icon box: the pixmap sits at the box top, not centred."""
+    from PyQt6.QtCore import QSize
+
+    panel = _loaded_panel(qtbot, tmp_path, size=(600, 400))
+    panel.setIconSize(QSize(130, 130))
+    index = panel.model().index(0, 0)
+    item_rect = panel.visualRect(index)
+    rect = panel.itemDelegate().photo_rect(item_rect, index)
+    assert rect.top() == item_rect.top() + 1 + CARD_PAD
+    assert rect.height() < 130
+
+
 def test_clicking_checkbox_requests_adoption_toggle(qtbot, tmp_path):
     from PyQt6.QtCore import Qt
     from PyQt6.QtTest import QTest
