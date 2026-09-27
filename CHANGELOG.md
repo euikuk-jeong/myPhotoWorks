@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-09-27
+
+### Fixed
+- 일괄 적용 후 썸네일 카드의 파일명이 "완료"/"오류"로 바뀌던 문제 — 파일명은 유지하고 처리 상태(처리중/완료/오류)는 사진 위 배지로 표시
+
 ## [1.4.0] - 2026-09-27
 
 ### Added
