@@ -176,6 +176,7 @@ class MainWindow(QMainWindow):
 
         self._thumb_panel = ThumbnailPanel()
         self._thumb_panel.photo_selected.connect(self._on_photo_selected)
+        self._thumb_panel.current_size_loaded.connect(self._show_file)
         self._thumb_panel.photo_double_clicked.connect(self._on_photo_double_clicked)
         self._thumb_panel.show_info_requested.connect(self._on_about)
         self._thumb_panel.photos_added.connect(self._on_photos_added)
@@ -418,8 +419,12 @@ class MainWindow(QMainWindow):
 
     def _on_group_run(self) -> None:
         photos = self._thumb_panel.all_photos()
-        if not photos or self._group_worker is not None:
+        if not photos:
             return
+        if self._group_worker is not None:
+            # done/cancelled/error re-enable the run button just before the previous
+            # thread exits; a quick "다시 그룹핑" lands in that gap — let it finish first
+            self._group_worker.wait()
         from myphotoworks.workers.group_worker import GroupWorker
 
         self._drop_session()
@@ -447,7 +452,9 @@ class MainWindow(QMainWindow):
             self._group_worker.requestInterruption()
 
     def _on_group_thread_finished(self) -> None:
-        worker, self._group_worker = self._group_worker, None
+        worker = self.sender()  # may be a previous worker if a new run already started
+        if worker is self._group_worker:
+            self._group_worker = None
         if worker is not None:
             worker.deleteLater()
 

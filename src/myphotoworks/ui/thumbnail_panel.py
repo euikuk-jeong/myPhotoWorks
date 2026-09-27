@@ -204,9 +204,12 @@ class ThumbnailPanel(QListWidget):
         User clicked a card checkbox (or pressed Space) — value is the requested new state.
     photos_added(list) / photos_removed(list)
         Photos were added to / removed from the list.
+    current_size_loaded(PhotoItem)
+        The current photo's thumbnail (and so its pixel size) finished loading.
     """
 
     photo_selected = pyqtSignal(object)
+    current_size_loaded = pyqtSignal(object)
     photo_double_clicked = pyqtSignal(object)
     show_info_requested = pyqtSignal()
     adoption_toggle_requested = pyqtSignal(object, bool)
@@ -447,6 +450,9 @@ class ThumbnailPanel(QListWidget):
                 item = self.item(i)
                 if item is not None:
                     item.setIcon(icon)
+        current = self.current_photo()
+        if current is not None and str(current.source_path) == path:
+            self.current_size_loaded.emit(current)
 
     # ------------------------------------------------------------------
     # Events
