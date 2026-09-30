@@ -780,3 +780,36 @@ def test_review_group_card_paints_without_error(qtbot, tmp_path):
     lst = win._group_list
     assert lst.visualItemRect(lst.item(0)).height() >= 60           # card rows, not text rows
     assert not lst.grab().isNull()
+
+
+def test_export_labels_failure_shows_warning_instead_of_crashing(window, qtbot, tmp_path,
+                                                               monkeypatch):
+    import myphotoworks.dev.labels as labels
+    import myphotoworks.ui.main_window as mw
+
+    run_grouping(window, qtbot)
+    monkeypatch.setattr(mw.QFileDialog, "getSaveFileName",
+                        staticmethod(lambda *a, **k: (str(tmp_path / "x.json"), "")))
+
+    def boom(*a, **k):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(labels, "write_labels", boom)
+    shown = []
+    monkeypatch.setattr(mw.QMessageBox, "warning", staticmethod(lambda *a: shown.append(a[2])))
+    window._on_export_labels()
+    assert shown and "disk full" in shown[0]
+
+
+def test_export_labels_success_writes_file(window, qtbot, tmp_path, monkeypatch):
+    import json
+
+    import myphotoworks.ui.main_window as mw
+
+    run_grouping(window, qtbot)
+    out = tmp_path / "labels.json"
+    monkeypatch.setattr(mw.QFileDialog, "getSaveFileName",
+                        staticmethod(lambda *a, **k: (str(out), "")))
+    monkeypatch.setattr(mw.QMessageBox, "information", staticmethod(lambda *a: None))
+    window._on_export_labels()
+    assert json.loads(out.read_text(encoding="utf-8"))["schema"] == 1

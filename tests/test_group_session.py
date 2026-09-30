@@ -271,6 +271,7 @@ def test_label_edited_group_is_reviewed_with_new_picked():  # A2
     s.set_adopted(ps[1], True)
     g = label_groups(s.to_label_dict(Path("/r")))["a.jpg"]
     assert g["picked"] == ["b.jpg"] and g["reviewed"] is True and g["recommended"] == "a.jpg"
+    assert g["edited"] is True
 
 
 def test_label_untouched_group_is_not_reviewed():  # A3
@@ -282,7 +283,7 @@ def test_label_reviewed_only_group_keeps_recommendation_as_picked():  # A4
     s, _ = labels_session()
     s.mark_reviewed(1)
     g = label_groups(s.to_label_dict(Path("/r")))["d.jpg"]
-    assert g["reviewed"] is True and g["picked"] == ["e.jpg"]
+    assert g["reviewed"] is True and g["picked"] == ["e.jpg"] and g["edited"] is False
     assert label_groups(s.to_label_dict(Path("/r")))["a.jpg"]["reviewed"] is False
 
 
@@ -306,7 +307,10 @@ def test_label_top_level_fields():  # A7
     label = s.to_label_dict(Path("/r"))
     assert label["schema"] == 1 and label["source"] == "user"
     assert label["algorithm"] == ALGORITHM_VERSION and label["root"] == str(Path("/r"))
-    assert set(label["groups"][0]) == {"id", "files", "picked", "recommended", "reviewed"}
+    assert set(label["groups"][0]) == {
+        "id", "files", "picked", "recommended", "reviewed", "edited"}
+    assert label["weights"] == list(W)
+    assert all(g["edited"] is False for g in label["groups"])  # untouched groups
 
 
 def test_label_reflects_merge_split_and_undo():  # A8
@@ -319,10 +323,19 @@ def test_label_reflects_merge_split_and_undo():  # A8
     assert [len(g["files"]) for g in s.to_label_dict(Path("/r"))["groups"]] == [2, 2]
 
 
-def test_label_root_defaults_to_common_parent_and_falls_back_to_name():  # A9
+def test_label_root_defaults_to_common_parent():  # A9
     s, _ = labels_session()
     assert s.to_label_dict()["root"] == str(Path("/r"))
-    s2 = GroupSession([photo("/x/a.jpg", 90), photo("/y/b.jpg", 50)], [[0, 1]], W)
-    label = s2.to_label_dict(Path("/x"))
-    assert label["groups"][0]["files"] == ["a.jpg", "b.jpg"]
-    assert s2.to_label_dict()["groups"][0]["files"] == ["x/a.jpg", "y/b.jpg"]
+
+
+def test_label_uses_own_path_outside_root_so_same_names_do_not_collide():  # A9b
+    s = GroupSession([photo("/x/IMG_1.jpg", 90), photo("/y/IMG_1.jpg", 50)], [[0, 1]], W)
+    files = s.to_label_dict(Path("/x"))["groups"][0]["files"]
+    assert files == ["IMG_1.jpg", "/y/IMG_1.jpg"] and len(set(files)) == 2
+    assert s.to_label_dict()["groups"][0]["files"] == ["x/IMG_1.jpg", "y/IMG_1.jpg"]
+
+
+def test_label_without_common_root_does_not_raise():  # A9c (e.g. C:\ and D:\ on Windows)
+    s = GroupSession([photo("rel/a.jpg", 90), photo("/x/b.jpg", 50)], [[0, 1]], W)
+    label = s.to_label_dict()  # os.path.commonpath raises ValueError for mixed paths
+    assert label["root"] == "." and label["groups"][0]["files"] == ["rel/a.jpg", "/x/b.jpg"]

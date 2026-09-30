@@ -580,7 +580,11 @@ class MainWindow(QMainWindow):
         )
         if not path:
             return
-        label = write_labels(self._session, Path(path))
+        try:
+            label = write_labels(self._session, Path(path))
+        except (OSError, ValueError) as e:  # an exception escaping a slot would abort the app
+            QMessageBox.warning(self, "내보내기 실패", f"저장하지 못했습니다.\n{e}")
+            return
         used = sum(1 for g in label["groups"] if g["reviewed"])
         QMessageBox.information(
             self, "내보내기 완료",

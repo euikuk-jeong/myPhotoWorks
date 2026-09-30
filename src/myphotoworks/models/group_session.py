@@ -87,37 +87,48 @@ class GroupSession:
     def to_label_dict(self, root: Path | None = None, source: str = "user") -> dict:
         """Snapshot of the user's decisions as an evaluation label (schema 1).
 
-        Groups the user never opened or edited only mirror the recommendation, so they are
-        exported with ``reviewed=False`` and must not be counted as labels. Single-photo
-        groups carry no choice and are skipped. File names are relative to ``root``
-        (default: the common parent folder of all photos).
+        ``reviewed``: the user opened or edited the group. Untouched groups only mirror the
+        recommendation and must not be counted as labels. ``edited``: the user's pick differs
+        from the recommendation, the strictest kind of label. Single-photo groups carry no
+        choice and are skipped. File names are relative to ``root`` (default: the common
+        parent folder); photos that cannot be expressed relative to it, or all photos when
+        there is no common folder (e.g. different drives), use their own path so names never
+        collide.
         """
         if root is None:
             parents = [os.fspath(p.source_path.parent) for p in self._photos]
-            root = Path(os.path.commonpath(parents)) if parents else Path(".")
+            try:
+                root = Path(os.path.commonpath(parents)) if parents else Path(".")
+            except ValueError:  # different drives / mixed absolute and relative paths
+                root = Path("")
 
         def rel(p: PhotoItem) -> str:
             try:
                 return p.source_path.relative_to(root).as_posix()
             except ValueError:
-                return p.source_path.name
+                return p.source_path.as_posix()
 
         groups = []
         for gid in self._order:
             members = self._members[gid]
             if len(members) < 2:
                 continue
+            picked = [rel(p) for p in members if p.is_adopted]
+            recommended = next((rel(p) for p in members if p.is_recommended), None)
+            reviewed = self.tag(gid) != TAG_TODO
             groups.append({
                 "id": gid,
                 "files": [rel(p) for p in members],
-                "picked": [rel(p) for p in members if p.is_adopted],
-                "recommended": next((rel(p) for p in members if p.is_recommended), None),
-                "reviewed": self.tag(gid) != TAG_TODO,
+                "picked": picked,
+                "recommended": recommended,
+                "reviewed": reviewed,
+                "edited": reviewed and picked != [recommended],
             })
         return {
             "schema": 1,
             "source": source,
             "algorithm": ALGORITHM_VERSION,
+            "weights": list(self._weights),
             "root": os.fspath(root),
             "groups": groups,
         }

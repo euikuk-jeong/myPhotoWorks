@@ -3,7 +3,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image, ImageFilter
 
-from myphotoworks.core.scoring import QualityScores, recommend
+from myphotoworks.core.scoring import ALGORITHM_VERSION, QualityScores, recommend
 from myphotoworks.dev.eval_metrics import (
     baseline_rank,
     evaluate,
@@ -122,3 +122,63 @@ def test_root_override(tmp_path):
     labels = [label([grp(["x.jpg", "y.jpg"], ["x.jpg"])], root="D:/nowhere")]
     assert evaluate(labels, root_override=tmp_path).skipped_unreadable == 0
     assert evaluate(labels).skipped_unreadable == 1
+
+
+def test_label_weights_drive_the_ranking():  # C11
+    table = {"hi_sharp": QualityScores(90, 10, 10), "hi_exp": QualityScores(10, 90, 10)}
+
+    def fn(path):
+        return table[path.name]
+
+    def picked_hit(weights):
+        g = grp(["hi_sharp", "hi_exp"], ["hi_sharp"])
+        return evaluate([{**label([g]), "weights": weights}], score_fn=fn).results[0].top1
+
+    assert picked_hit([1, 0, 0]) is True
+    assert picked_hit([0, 1, 0]) is False
+
+
+def test_algorithm_mismatch_warns_but_matching_or_missing_does_not():  # C12
+    g = grp(["a", "b"], ["a"])
+    old = {**label([g]), "algorithm": "old"}
+    ok = {**label([g]), "algorithm": ALGORITHM_VERSION}
+    assert evaluate([old], score_fn=fake_scores(SCORES)).warnings
+    assert not evaluate([ok, label([g])], score_fn=fake_scores(SCORES)).warnings
+    assert "old" in summarize(evaluate([old], score_fn=fake_scores(SCORES)))["warnings"][0]
+
+
+def test_failures_keep_cause_and_are_capped():  # C13
+    groups = [grp(["a", f"missing{i}"], ["a"]) for i in range(9)]
+    r = evaluate([label(groups)], score_fn=fake_scores(SCORES))
+    assert r.skipped_unreadable == 9 and len(r.errors) == 5
+    assert "FileNotFoundError" in r.errors[0] and "missing0" in r.errors[0]
+    assert summarize(r)["errors"] == r.errors
+
+
+def test_unresolvable_picked_is_bad_label_not_a_miss():  # C14
+    labels = [label([grp(["a", "b"], ["zzz"]), grp(["a", "b"], ["a"])])]
+    r = evaluate(labels, score_fn=fake_scores(SCORES))
+    assert len(r.results) == 1 and r.skipped_bad_label == 1
+    assert summarize(r)["skipped"]["bad_label"] == 1
+
+
+def test_top2_reported_without_trivial_two_photo_groups():  # C15
+    labels = [label([
+        grp(["a", "b"], ["b"]),            # size 2: top2 always true
+        grp(["a", "b", "c"], ["c"]),       # size 3: c is last -> top2 miss
+    ])]
+    s = summarize(evaluate(labels, score_fn=fake_scores(SCORES)))
+    assert s["overall"]["top2"] == 0.5
+    assert s["top2_size3plus"] == {"n": 1, "top1": 0.0, "top2": 0.0}
+
+
+def test_edited_only_summary():  # C16
+    labels = [label([
+        grp(["a", "b"], ["a"], edited=False),
+        grp(["a", "b"], ["b"], edited=True),
+    ])]
+    s = summarize(evaluate(labels, score_fn=fake_scores(SCORES)))
+    assert s["overall"]["top1"] == 0.5
+    assert s["edited_only"] == {"n": 1, "top1": 0.0, "top2": 1.0}
+    assert summarize(evaluate([label([grp(["a", "b"], ["a"])])],
+                              score_fn=fake_scores(SCORES)))["edited_only"]["n"] == 0
