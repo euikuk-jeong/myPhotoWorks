@@ -244,3 +244,85 @@ def test_merge_keeps_unanalysed_photos_adopted():
     s.add_photos([new])
     s.merge(a.group_id, new.group_id)
     assert a.is_adopted and new.is_adopted           # never silently dropped
+
+
+# ---- label export (evaluation) ------------------------------------------
+
+def labels_session():
+    ps = [photo(f"/r/{n}.jpg", s) for n, s in
+          [("a", 90), ("b", 70), ("c", 30), ("d", 60), ("e", 80), ("f", 50)]]
+    return GroupSession(ps, [[0, 1, 2], [3, 4], [5]], W), ps
+
+
+def label_groups(label):
+    return {g["files"][0]: g for g in label["groups"]}
+
+
+def test_label_files_follow_group_order_relative_to_root():  # A1
+    s, ps = labels_session()
+    label = s.to_label_dict(Path("/r"))
+    assert [g["files"] for g in label["groups"]] == [
+        ["a.jpg", "b.jpg", "c.jpg"], ["d.jpg", "e.jpg"]]
+
+
+def test_label_edited_group_is_reviewed_with_new_picked():  # A2
+    s, ps = labels_session()
+    s.set_adopted(ps[0], False)
+    s.set_adopted(ps[1], True)
+    g = label_groups(s.to_label_dict(Path("/r")))["a.jpg"]
+    assert g["picked"] == ["b.jpg"] and g["reviewed"] is True and g["recommended"] == "a.jpg"
+
+
+def test_label_untouched_group_is_not_reviewed():  # A3
+    s, _ = labels_session()
+    assert all(g["reviewed"] is False for g in s.to_label_dict(Path("/r"))["groups"])
+
+
+def test_label_reviewed_only_group_keeps_recommendation_as_picked():  # A4
+    s, _ = labels_session()
+    s.mark_reviewed(1)
+    g = label_groups(s.to_label_dict(Path("/r")))["d.jpg"]
+    assert g["reviewed"] is True and g["picked"] == ["e.jpg"]
+    assert label_groups(s.to_label_dict(Path("/r")))["a.jpg"]["reviewed"] is False
+
+
+def test_label_multiple_picked():  # A5
+    s, ps = labels_session()
+    s.adopt_all(0)
+    g = label_groups(s.to_label_dict(Path("/r")))["a.jpg"]
+    assert g["picked"] == ["a.jpg", "b.jpg", "c.jpg"]
+
+
+def test_label_skips_single_photo_groups():  # A6
+    s, _ = labels_session()
+    files = [f for g in s.to_label_dict(Path("/r"))["groups"] for f in g["files"]]
+    assert "f.jpg" not in files
+
+
+def test_label_top_level_fields():  # A7
+    from myphotoworks.core.scoring import ALGORITHM_VERSION
+
+    s, _ = labels_session()
+    label = s.to_label_dict(Path("/r"))
+    assert label["schema"] == 1 and label["source"] == "user"
+    assert label["algorithm"] == ALGORITHM_VERSION and label["root"] == str(Path("/r"))
+    assert set(label["groups"][0]) == {"id", "files", "picked", "recommended", "reviewed"}
+
+
+def test_label_reflects_merge_split_and_undo():  # A8
+    s, ps = labels_session()
+    s.merge(0, 1)
+    assert len(s.to_label_dict(Path("/r"))["groups"][0]["files"]) == 5
+    s.undo()
+    assert [len(g["files"]) for g in s.to_label_dict(Path("/r"))["groups"]] == [3, 2]
+    s.detach_photo(ps[2])
+    assert [len(g["files"]) for g in s.to_label_dict(Path("/r"))["groups"]] == [2, 2]
+
+
+def test_label_root_defaults_to_common_parent_and_falls_back_to_name():  # A9
+    s, _ = labels_session()
+    assert s.to_label_dict()["root"] == str(Path("/r"))
+    s2 = GroupSession([photo("/x/a.jpg", 90), photo("/y/b.jpg", 50)], [[0, 1]], W)
+    label = s2.to_label_dict(Path("/x"))
+    assert label["groups"][0]["files"] == ["a.jpg", "b.jpg"]
+    assert s2.to_label_dict()["groups"][0]["files"] == ["x/a.jpg", "y/b.jpg"]

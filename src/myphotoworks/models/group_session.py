@@ -1,9 +1,11 @@
 """GroupSession — group membership, adoption state and undo (no GUI dependencies)."""
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
+from pathlib import Path
 
-from myphotoworks.core.scoring import Weights, explain, recommend
+from myphotoworks.core.scoring import ALGORITHM_VERSION, Weights, explain, recommend
 from myphotoworks.models.photo_item import PhotoItem
 
 TAG_REVIEWED = "추천 채택"
@@ -81,6 +83,44 @@ class GroupSession:
     @property
     def can_undo(self) -> bool:
         return bool(self._undo)
+
+    def to_label_dict(self, root: Path | None = None, source: str = "user") -> dict:
+        """Snapshot of the user's decisions as an evaluation label (schema 1).
+
+        Groups the user never opened or edited only mirror the recommendation, so they are
+        exported with ``reviewed=False`` and must not be counted as labels. Single-photo
+        groups carry no choice and are skipped. File names are relative to ``root``
+        (default: the common parent folder of all photos).
+        """
+        if root is None:
+            parents = [os.fspath(p.source_path.parent) for p in self._photos]
+            root = Path(os.path.commonpath(parents)) if parents else Path(".")
+
+        def rel(p: PhotoItem) -> str:
+            try:
+                return p.source_path.relative_to(root).as_posix()
+            except ValueError:
+                return p.source_path.name
+
+        groups = []
+        for gid in self._order:
+            members = self._members[gid]
+            if len(members) < 2:
+                continue
+            groups.append({
+                "id": gid,
+                "files": [rel(p) for p in members],
+                "picked": [rel(p) for p in members if p.is_adopted],
+                "recommended": next((rel(p) for p in members if p.is_recommended), None),
+                "reviewed": self.tag(gid) != TAG_TODO,
+            })
+        return {
+            "schema": 1,
+            "source": source,
+            "algorithm": ALGORITHM_VERSION,
+            "root": os.fspath(root),
+            "groups": groups,
+        }
 
     # ---- scoring ---------------------------------------------------------
 

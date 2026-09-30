@@ -13,6 +13,7 @@ IDEAL_MEAN = 118.0
 BLUR_ABS = 30.0                # sharpness below this is flagged as blur
 BLUR_REL = 0.6                 # ...or below this share of the group's best
 DEFAULT_WEIGHTS = (0.5, 0.3, 0.2)
+ALGORITHM_VERSION = "baseline"  # recorded in exported labels; bump when scoring changes
 
 Weights = tuple[float, float, float]
 

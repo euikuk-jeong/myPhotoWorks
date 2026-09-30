@@ -195,6 +195,7 @@ class MainWindow(QMainWindow):
         self._settings_panel.group_cancel_requested.connect(self._on_group_cancel)
         self._settings_panel.group_review_requested.connect(self._on_review)
         self._settings_panel.group_rescore_requested.connect(self._on_rescore)
+        self._settings_panel.group_export_labels_requested.connect(self._on_export_labels)
         splitter.addWidget(self._settings_panel)
         self._settings_panel.setMinimumWidth(SETTINGS_MIN_W)
 
@@ -567,6 +568,24 @@ class MainWindow(QMainWindow):
         win.destroyed.connect(lambda _o=None: setattr(self, "_review_win", None))
         self._review_win = win
         win.show()
+
+    def _on_export_labels(self) -> None:
+        """Developer feature: save adoption decisions as an evaluation label JSON."""
+        if self._session is None:
+            return
+        from myphotoworks.dev.labels import write_labels
+
+        path, _ = QFileDialog.getSaveFileName(
+            self, "채택 결과 내보내기", "labels.json", "JSON (*.json)"
+        )
+        if not path:
+            return
+        label = write_labels(self._session, Path(path))
+        used = sum(1 for g in label["groups"] if g["reviewed"])
+        QMessageBox.information(
+            self, "내보내기 완료",
+            f"그룹 {len(label['groups']):,}개 중 검토된 {used:,}개가 라벨로 유효합니다.\n{path}",
+        )
 
     def _on_review_window_changed(self) -> None:
         self._thumb_panel.rebuild()
