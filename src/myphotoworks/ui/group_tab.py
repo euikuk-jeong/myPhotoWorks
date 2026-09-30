@@ -20,6 +20,7 @@ from PyQt6.QtWidgets import (
 
 from myphotoworks.core.grouping import GroupingMode
 from myphotoworks.core.scoring import DEFAULT_WEIGHTS, normalize_weights
+from myphotoworks.dev.labels import is_dev_mode
 from myphotoworks.models.settings import AppSettings
 from myphotoworks.ui.guide import open_guide
 from myphotoworks.ui.section import Section
@@ -96,6 +97,7 @@ class GroupTab(QWidget):
     cancel_requested = pyqtSignal()
     review_requested = pyqtSignal()
     rescore_requested = pyqtSignal()
+    export_labels_requested = pyqtSignal()
 
     def __init__(self, settings: AppSettings, parent=None) -> None:
         super().__init__(parent)
@@ -241,6 +243,11 @@ class GroupTab(QWidget):
         box.addWidget(self._review_btn)
         self._review_hint = _note("그룹핑 후 사용할 수 있습니다.")
         box.addWidget(self._review_hint)
+        self._export_btn = None
+        if is_dev_mode():  # developer-only: hidden unless MYPHOTOWORKS_DEV is set
+            self._export_btn = QPushButton("채택 결과 내보내기 (개발)")
+            self._export_btn.clicked.connect(self.export_labels_requested)
+            box.addWidget(self._export_btn)
         return self._run_box
 
     def _build_recommend_box(self) -> QGroupBox:
@@ -440,6 +447,8 @@ class GroupTab(QWidget):
         self._run_btn.setEnabled(idle and self._has_photos)
         self._review_btn.setEnabled(idle and self._done)
         self._stale_btn.setEnabled(idle)
+        if self._export_btn is not None:
+            self._export_btn.setEnabled(idle and self._done)
         self._review_hint.setVisible(not (idle and self._done))
         self._review_hint.setText(
             "그룹핑 진행 중에는 사용할 수 없습니다." if self._running
