@@ -2,9 +2,11 @@
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
 
 from myphotoworks.core.grouping import GroupingMode
+from myphotoworks.core.ranking import SENSITIVITY_CHOICES
 from myphotoworks.models.settings import (
     AppSettings,
     CorrectionMode,
@@ -16,6 +18,7 @@ _CONFIG_PATH = Path.home() / ".myphotoworks" / "config.json"
 _SETTINGS_KEY = "app_settings"
 # v2: EXIF hint option became default-on; older configs stored the old default (False).
 _GROUPING_UI_VERSION = 2
+_DEFAULT_SENSITIVITY = 1.0
 
 
 def load_config() -> dict:
@@ -50,13 +53,25 @@ def save_settings(cfg: dict, settings: AppSettings) -> None:
         "time_gap": settings.time_gap,
         "global_clustering": settings.global_clustering,
         "use_exif_hints": settings.use_exif_hints,
-        "weight_sharpness": settings.weight_sharpness,
-        "weight_exposure": settings.weight_exposure,
-        "weight_color": settings.weight_color,
+        "recommend_sensitivity": settings.recommend_sensitivity,
         "show_reason": settings.show_reason,
-        "show_score": settings.show_score,
         "grouping_ui_version": _GROUPING_UI_VERSION,
     }
+
+
+def _sensitivity(value) -> float:
+    """Deadband multiplier from a config value, snapped to the nearest settings step so the UI
+    and the recommendation always agree; anything unusable means "normal" (1.0).
+
+    Old configs also carried ``weight_*`` and ``show_score`` keys; they are simply not read.
+    """
+    try:
+        v = float(value)
+    except (TypeError, ValueError):
+        return _DEFAULT_SENSITIVITY
+    if not (math.isfinite(v) and v > 0.0):
+        return _DEFAULT_SENSITIVITY
+    return min((scale for scale, _name in SENSITIVITY_CHOICES), key=lambda s: abs(s - v))
 
 
 def load_settings(cfg: dict) -> AppSettings:
@@ -102,11 +117,8 @@ def load_settings(cfg: dict) -> AppSettings:
                 True if int(data.get("grouping_ui_version", 1)) < _GROUPING_UI_VERSION
                 else bool(data.get("use_exif_hints", True))
             ),
-            weight_sharpness=float(data.get("weight_sharpness", 0.5)),
-            weight_exposure=float(data.get("weight_exposure", 0.3)),
-            weight_color=float(data.get("weight_color", 0.2)),
+            recommend_sensitivity=_sensitivity(data.get("recommend_sensitivity")),
             show_reason=bool(data.get("show_reason", True)),
-            show_score=bool(data.get("show_score", True)),
         )
     except Exception:
         return AppSettings()

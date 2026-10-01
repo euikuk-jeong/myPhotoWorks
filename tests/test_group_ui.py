@@ -59,11 +59,6 @@ def test_group_tab_settings_roundtrip(qtbot):
     assert s.grouping_mode == GroupingMode.SIMILARITY_ONLY
     assert s.similarity_slider == 80 and s.time_gap == 4.5
     assert not tab._gap_spin.isEnabled()        # time gap unused in similarity-only mode
-    with qtbot.waitSignal(tab.weights_changed):
-        tab._w_sliders[0].setValue(10)
-    assert s.weight_sharpness == 0.1
-    tab._on_reset_weights()
-    assert s.weights() == (0.5, 0.3, 0.2)
 
 
 def test_group_tab_review_button_states(qtbot):
@@ -109,27 +104,6 @@ def test_toolbar_marks_process_as_primary_and_view_as_segments(window):
     assert window._remove_btn.property("quiet") is True
 
 
-def test_rebalance_weights_keeps_total_100_and_ratio():
-    from myphotoworks.ui.group_tab import rebalance_weights
-
-    assert rebalance_weights([50, 30, 20], 0, 10) == [10, 54, 36]
-    assert rebalance_weights([50, 30, 20], 2, 100) == [0, 0, 100]
-    assert rebalance_weights([100, 0, 0], 0, 40) == [40, 30, 30]   # others were 0: split
-    assert sum(rebalance_weights([33, 33, 34], 1, 47)) == 100
-
-
-def test_moving_one_weight_slider_moves_the_others(qtbot):
-    from myphotoworks.ui.group_tab import GroupTab
-
-    s = AppSettings()
-    tab = GroupTab(s)
-    qtbot.addWidget(tab)
-    tab._w_sliders[0].setValue(10)
-    values = [sl.value() for sl in tab._w_sliders]
-    assert values == [10, 54, 36]
-    assert [lbl.text() for lbl in tab._w_labels] == ["10%", "54%", "36%"]
-
-
 def test_settings_panel_sections_have_header_bands(qtbot):
     from PyQt6.QtWidgets import QToolButton
 
@@ -169,19 +143,19 @@ def test_section_fold_restores_only_previously_visible_content(qtbot):
 def test_review_page_keys_step_groups_and_toolbar_shows_adopted(qtbot, tmp_path):
     from PyQt6.QtTest import QTest
 
-    from myphotoworks.core.scoring import QualityScores
     from myphotoworks.models.group_session import GroupSession
     from myphotoworks.models.photo_item import PhotoItem
     from myphotoworks.ui.group_review_window import GroupReviewWindow
+    from tests.synthetic import scores
 
     photos = []
     for i in range(4):
         p = tmp_path / f"pg_{i}.jpg"
         scene(i).save(p, "JPEG")
         item = PhotoItem(p)
-        item.scores = QualityScores(50, 60, 60)
+        item.scores = scores(50, 60, 60)
         photos.append(item)
-    session = GroupSession(photos, [[0, 1], [2, 3]], (0.5, 0.3, 0.2))
+    session = GroupSession(photos, [[0, 1], [2, 3]], 1.0)
     win = GroupReviewWindow(session, AppSettings())
     qtbot.addWidget(win)
     win.show()
@@ -254,16 +228,6 @@ def test_grouped_view_has_headers_but_photos_list_excludes_them(window, qtbot):
     assert all(p is not None for p in panel.photos())
     window._all_view_btn.click()
     assert panel.count() == len(panel.photos()) == 6
-
-
-def test_weight_change_rescores_without_regrouping(window, qtbot):
-    run_grouping(window, qtbot)
-    session = window._session
-    window._settings.weight_sharpness, window._settings.weight_exposure = 0.0, 1.0
-    window._settings.weight_color = 0.0
-    window._on_weights_changed()
-    assert window._session is session
-    assert session.adopted_count() == 4
 
 
 def test_adding_photos_keeps_session_and_adds_ungrouped_singles(window, qtbot, tmp_path):
@@ -450,9 +414,9 @@ def test_group_tab_has_three_titled_sections(qtbot):
     qtbot.addWidget(tab)
     titles = [b.title() for b in tab.findChildren(QGroupBox)]
     assert titles == ["그룹핑 설정", "실행과 결과", "추천 설정"]
-    # run button and result live in section 2, weights in section 3
+    # run button and result live in section 2, sensitivity in section 3
     assert tab._run_box.isAncestorOf(tab._run_btn) and tab._run_box.isAncestorOf(tab._review_btn)
-    assert tab._recommend_box.isAncestorOf(tab._reset_btn)
+    assert tab._recommend_box.isAncestorOf(tab._sens_combo)
     assert tab._settings_box.isAncestorOf(tab._exif_cb)
 
 
@@ -562,19 +526,19 @@ def test_review_preview_unreadable_photo_shows_message(window, qtbot, tmp_path):
 
 
 def _big_group_review(qtbot, tmp_path, n=24):
-    from myphotoworks.core.scoring import QualityScores
     from myphotoworks.models.group_session import GroupSession
     from myphotoworks.models.photo_item import PhotoItem
     from myphotoworks.ui.group_review_window import GroupReviewWindow
+    from tests.synthetic import scores
 
     photos = []
     for i in range(n):
         p = tmp_path / f"big_{i:02d}.jpg"
         scene(i % 5).save(p, "JPEG")
         item = PhotoItem(p)
-        item.scores = QualityScores(50 + i, 60, 60)
+        item.scores = scores(50 + i, 60, 60)
         photos.append(item)
-    session = GroupSession(photos, [list(range(n))], (0.5, 0.3, 0.2))
+    session = GroupSession(photos, [list(range(n))], 1.0)
     win = GroupReviewWindow(session, AppSettings())
     qtbot.addWidget(win)
     win.resize(1100, 720)
@@ -626,9 +590,9 @@ def test_review_toolbar_title_and_score_panel(qtbot, tmp_path):
     photo = win._strip.current_photo()
     assert win._score_title.text() == photo.source_path.name
     assert [lbl.text() for lbl in win._bar_values] == [
-        str(round(v)) for v in (photo.scores.sharpness, photo.scores.exposure, photo.scores.color)
+        str(round(v)) for v in (photo.scores.subject_sharpness, photo.scores.subject_exposure,
+                                photo.scores.color)
     ]
-    assert win._total_label.text().isdigit()
 
 
 def test_review_toggle_in_scrolled_strip_keeps_scroll_position(qtbot, tmp_path):
@@ -670,19 +634,19 @@ def test_review_merge_up_and_down_leave_one_adopted_recommendation(window, qtbot
 
 
 def _many_groups_review(qtbot, tmp_path, n=30):
-    from myphotoworks.core.scoring import QualityScores
     from myphotoworks.models.group_session import GroupSession
     from myphotoworks.models.photo_item import PhotoItem
     from myphotoworks.ui.group_review_window import GroupReviewWindow
+    from tests.synthetic import scores
 
     photos = []
     for i in range(n * 2):
         p = tmp_path / f"g_{i:02d}.jpg"
         scene(i % 5).resize((40, 30)).save(p, "JPEG")
         item = PhotoItem(p)
-        item.scores = QualityScores(50 + i, 60, 60)
+        item.scores = scores(50 + i, 60, 60)
         photos.append(item)
-    session = GroupSession(photos, [[2 * k, 2 * k + 1] for k in range(n)], (0.5, 0.3, 0.2))
+    session = GroupSession(photos, [[2 * k, 2 * k + 1] for k in range(n)], 1.0)
     win = GroupReviewWindow(session, AppSettings())
     qtbot.addWidget(win)
     win.resize(1100, 720)
@@ -711,15 +675,15 @@ def test_time_span_formats_single_and_range(tmp_path):
 
 
 def test_group_summary_uses_recommended_cover_and_counts(tmp_path):
-    from myphotoworks.core.scoring import QualityScores
     from myphotoworks.models.group_session import TAG_EDITED, TAG_TODO, GroupSession
     from myphotoworks.models.photo_item import PhotoItem
     from myphotoworks.ui.group_review_window import group_summary
+    from tests.synthetic import scores
 
     photos = [PhotoItem(tmp_path / f"{i}.jpg") for i in range(3)]
     for p, s in zip(photos, (40, 90, 60), strict=True):
-        p.scores = QualityScores(s, s, s)
-    session = GroupSession(photos, [[0, 1, 2]], (0.5, 0.3, 0.2))
+        p.scores = scores(s, s, s)
+    session = GroupSession(photos, [[0, 1, 2]], 1.0)
     g = session.groups()[0]
     s = group_summary(session, g, 4)
     assert (s.number, s.count, s.adopted, s.tag) == (4, 3, 1, TAG_TODO)
@@ -736,7 +700,7 @@ def test_group_summary_without_recommendation_uses_first_photo(tmp_path):
     from myphotoworks.ui.group_review_window import group_summary
 
     photos = [PhotoItem(tmp_path / f"{i}.jpg") for i in range(2)]   # never analysed
-    session = GroupSession(photos, [[0, 1]], (0.5, 0.3, 0.2))
+    session = GroupSession(photos, [[0, 1]], 1.0)
     assert group_summary(session, session.groups()[0], 1).cover is photos[0]
 
 

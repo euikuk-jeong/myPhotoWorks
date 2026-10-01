@@ -555,6 +555,11 @@ QProgressBar::chunk {
     border-radius: 2px;
 }
 
+/* review detail panel: a criterion that cannot tell the photos apart is dimmed */
+QProgressBar[tied="true"]::chunk {
+    background: @text_disabled;
+}
+
 /* ------------------------------------------------------------
    QListWidget — thumbnails sit directly on the workspace
    ------------------------------------------------------------ */
@@ -730,9 +735,9 @@ QLabel#scoreFile {
     font-weight: 500;
 }
 
-QLabel#scoreTotal {
+/* review detail panel: the criterion that decided the group */
+QLabel[deciding="true"] {
     color: @text_strong;
-    font-size: 22pt;
     font-weight: 600;
 }
 

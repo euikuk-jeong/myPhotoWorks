@@ -202,17 +202,6 @@ class _CardDelegate(QStyledItemDelegate):
             painter.drawPath(star)
             painter.fillPath(star, _STAR)
 
-        if self._panel.show_score and photo.scores is not None:
-            from myphotoworks.core.scoring import composite
-
-            text = str(round(composite(photo.scores, self._panel.weights)))
-            badge = QRect(r.right() - 31, r.bottom() - 21, 26, 16)
-            painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(tokens.color(tokens.SUNKEN, 200))
-            painter.drawRoundedRect(badge, 4, 4)
-            painter.setPen(QColor(tokens.TEXT))
-            painter.drawText(badge, Qt.AlignmentFlag.AlignCenter, text)
-
         if "흐림" in photo.reason:
             badge = QRect(r.left() + 5, r.bottom() - 21, 32, 16)
             painter.setPen(Qt.PenStyle.NoPen)
@@ -275,9 +264,7 @@ class ThumbnailPanel(QListWidget):
         self._session = None
         self._grouped_view = False
         self._adopted_only = False
-        self.show_score = True
         self.show_reason = True
-        self.weights = (0.5, 0.3, 0.2)
 
         self.currentRowChanged.connect(self._on_row_changed)
         self.itemDoubleClicked.connect(self._on_double_clicked)
@@ -362,8 +349,8 @@ class ThumbnailPanel(QListWidget):
         self._adopted_only = adopted_only
         self.rebuild()
 
-    def set_options(self, show_reason: bool, show_score: bool, weights) -> None:
-        self.show_reason, self.show_score, self.weights = show_reason, show_score, weights
+    def set_options(self, show_reason: bool) -> None:
+        self.show_reason = show_reason
         self.rebuild()
 
     def rebuild(self) -> None:

@@ -2,11 +2,11 @@ import json
 
 import pytest
 
-from myphotoworks.core.scoring import QualityScores
 from myphotoworks.dev.labels import DEV_ENV, is_dev_mode, write_labels
 from myphotoworks.models.group_session import GroupSession
 from myphotoworks.models.photo_item import PhotoItem
 from myphotoworks.models.settings import AppSettings
+from tests.synthetic import scores
 
 
 @pytest.mark.parametrize("value,expected", [
@@ -24,9 +24,9 @@ def test_write_labels_roundtrip_with_korean_names(tmp_path):  # B2
     ps = []
     for name, sharp in (("가족_1.jpg", 90), ("가족_2.jpg", 40)):
         p = PhotoItem(tmp_path / name)
-        p.scores = QualityScores(sharp, 70, 60)
+        p.scores = scores(sharp, 70, 60)
         ps.append(p)
-    session = GroupSession(ps, [[0, 1]], (0.5, 0.3, 0.2))
+    session = GroupSession(ps, [[0, 1]], 1.0)
     out = tmp_path / "labels.json"
     label = write_labels(session, out, root=tmp_path)
     assert json.loads(out.read_text(encoding="utf-8")) == label

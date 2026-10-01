@@ -1,3 +1,4 @@
+import math
 import os
 import re
 from pathlib import Path
@@ -12,10 +13,27 @@ from myphotoworks.core.grouping import (  # noqa: E402
     TIME_RELAX,
     threshold_from_slider,
 )
-from myphotoworks.core.scoring import QualityScores, composite  # noqa: E402
+from myphotoworks.core.ranking import (  # noqa: E402
+    COLOR_DEADBAND,
+    COLOR_IGNORE_BELOW,
+    EXPOSURE_DEADBAND,
+    SENSITIVITY_CHOICES,
+    SHARPNESS_DEADBAND,
+    TIEBREAK_WEIGHTS,
+    reason_label,
+    recommend,
+)
+from myphotoworks.core.scoring import (  # noqa: E402
+    BLUR_ABS,
+    BLUR_REL,
+    SHARP_GRAD_CEIL,
+    SHARP_TOP_PERCENT,
+    is_blurry,
+)
 from myphotoworks.models.settings import AppSettings  # noqa: E402
 from myphotoworks.ui import group_tab as group_tab_module  # noqa: E402
 from myphotoworks.ui import guide  # noqa: E402
+from tests.synthetic import scores  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 GUIDE_DIR = ROOT / "guide"
@@ -59,8 +77,11 @@ def test_pages_workflow_publishes_only_the_guide_folder():
 
 def test_guide_covers_grouping_and_recommendation_topics(html):
     for topic in ("모양 지문", "색 분포", "기준선", "촬영 시각", "EXIF", "선명도", "노출", "색감",
-                  "종합점수", "가중치", "추천", "채택", "한계", "예제 1", "예제 5"):
+                  "주제 영역", "불감대", "차이 미미", "민감도", "추천", "채택", "한계",
+                  "예제 1", "예제 5"):
         assert topic in html, topic
+    for gone in ("종합점수", "가중치"):          # the weighted-sum recommendation no longer exists
+        assert gone not in html, gone
     assert html.count("<svg") >= 8                                      # infographics
 
 
@@ -69,15 +90,42 @@ def test_guide_numbers_match_the_real_algorithm(html):
     assert f"{threshold_from_slider(50):.2f}" in html                    # default threshold
     assert f"{TIME_RELAX:.2f}" in html and f"{EXIF_MISMATCH_PENALTY:.2f}" in html
     assert f"{threshold_from_slider(50) - REPRESENTATIVE_SLACK:.2f}" in html
-    default = (0.5, 0.3, 0.2)
-    assert f"{composite(QualityScores(84, 88, 76), default):.1f}" in html
-    p1, p2 = QualityScores(90, 45, 60), QualityScores(70, 92, 65)
-    assert f"{composite(p1, default):.1f}" in html and f"{composite(p2, default):.1f}" in html
-    assert f"{composite(p1, (0.8, 0.1, 0.1)):.1f}" in html
 
 
-def test_guide_states_the_whole_image_limitation(html):
-    assert "전체”를 기준" in html or "전체”를 기준" in html
+def test_guide_recommendation_constants_match_the_algorithm(html):
+    assert f"{round(SHARPNESS_DEADBAND * 100)}%" in html
+    assert f"<b>{round(EXPOSURE_DEADBAND)}점</b> 이내" in html
+    assert f"{round(COLOR_DEADBAND)}점" in html and f"{round(COLOR_IGNORE_BELOW)}점 미만" in html
+    ws, we, wc = (round(w * 100) for w in TIEBREAK_WEIGHTS)
+    assert f"선명도 {ws} · 노출 {we} · 색감 {wc}" in html
+    assert f"{round(BLUR_ABS)}점 미만" in html and f"{round(BLUR_REL * 100)}% 미만" in html
+    for scale, name in SENSITIVITY_CHOICES:
+        assert f"{name} (×{scale:.1f})" in html, name
+    assert f"{round(SHARP_TOP_PERCENT)}%" in html and f"{round(SHARP_GRAD_CEIL)} 이상" in html
+
+
+def test_guide_sharpness_table_matches_the_score_curve(html):
+    for edge in (1, 10, 50, 150):
+        score = round(100 * min(1.0, math.sqrt(edge / SHARP_GRAD_CEIL)))
+        assert f"<td>{score}</td>" in html, edge
+
+
+def test_guide_example_4_picks_the_scored_winner_by_exposure():
+    group = [scores(84, 88, 76), scores(80, 62, 79), scores(48, 70, 74)]
+    rec = recommend(group)
+    assert (rec.index, rec.deciding_criterion, rec.tie) == (0, "subject_exposure", False)
+    assert [is_blurry(s, group) for s in group] == [False, False, True]
+    assert reason_label(rec, 3) == "주제 노출 우세"
+
+
+def test_guide_example_5_matches_each_sensitivity_step():
+    group = [scores(92, 55, 60), scores(84, 90, 60)]
+    winners = {name: recommend(group, scale).index for scale, name in SENSITIVITY_CHOICES}
+    assert winners == {"낮음": 1, "보통": 1, "높음": 0}
+
+
+def test_guide_states_the_subject_estimation_limitation(html):
+    assert "가장 선명한 영역”으로 추정" in html and "전체”를 기준" not in html
 
 
 # ---- opening the link ---------------------------------------------------------

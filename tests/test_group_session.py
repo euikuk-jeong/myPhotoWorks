@@ -1,6 +1,5 @@
 from pathlib import Path
 
-from myphotoworks.core.scoring import QualityScores
 from myphotoworks.models.group_session import (
     TAG_EDITED,
     TAG_REVIEWED,
@@ -8,13 +7,14 @@ from myphotoworks.models.group_session import (
     GroupSession,
 )
 from myphotoworks.models.photo_item import PhotoItem
+from tests.synthetic import scores
 
-W = (0.5, 0.3, 0.2)
+W = 1.0   # recommendation sensitivity: normal
 
 
 def photo(name, sharp, exp=70, col=60):
     p = PhotoItem(Path(name))
-    p.scores = QualityScores(sharp, exp, col)
+    p.scores = scores(sharp, exp, col)
     return p
 
 
@@ -125,21 +125,6 @@ def test_recommendation_refreshed_after_move_adoption_kept():
     assert ps[3].is_recommended                 # d is now alone in its old group
 
 
-def test_rescore_follows_weights_only_for_untouched_groups():
-    a = photo("a", 90, 20, 20)     # sharp, poor exposure
-    b = photo("b", 40, 95, 95)     # soft, great exposure/colour
-    c = photo("c", 90, 20, 20)
-    d = photo("d", 40, 95, 95)
-    s = GroupSession([a, b, c, d], [[0, 1], [2, 3]], (1, 0, 0))
-    assert a.is_adopted and c.is_adopted
-    s.set_adopted(c, False)
-    s.set_adopted(d, True)                       # group 1 is user-edited
-    s.rescore((0, 0.5, 0.5))
-    assert b.is_recommended and b.is_adopted and not a.is_adopted    # followed
-    assert d.is_recommended                                           # badge updated
-    assert d.is_adopted and not c.is_adopted                          # user choice kept
-
-
 def test_visible_photos_filter_and_tags():
     s, ps = make()
     assert len(s.visible_photos(False)) == 6
@@ -223,17 +208,19 @@ def test_merge_undo_restores_previous_adoption_and_edit_state():
     assert s.tag(g0) == TAG_EDITED and s.group_count() == 3
 
 
-def test_merged_group_follows_weight_changes_until_edited_again():
-    a = photo("a", 90, 20, 20)
-    b = photo("b", 40, 95, 95)
-    c = photo("c", 90, 20, 20)
-    s = GroupSession([a, b, c], [[0], [1], [2]], (1, 0, 0))
-    s.merge(a.group_id, b.group_id)                  # sharpness-only weights: a wins
+def test_merged_group_follows_sensitivity_changes_until_edited_again():
+    from myphotoworks.core.ranking import SHARPNESS_DEADBAND
+
+    soft = 100.0 * (1 - 0.8 * SHARPNESS_DEADBAND)   # a tie on sharpness at 1.0, behind at 0.5
+    a = photo("a", 100, 20, 20)
+    b = photo("b", soft, 95, 95)
+    s = GroupSession([a, b], [[0], [1]], 0.5)
+    s.merge(a.group_id, b.group_id)                  # high sensitivity: a is clearly sharper
     assert a.is_adopted and not b.is_adopted
-    s.rescore((0, 0.5, 0.5))                         # not user-edited -> follows the new pick
+    s.rescore(1.0)                                   # not user-edited -> follows the new pick
     assert b.is_adopted and not a.is_adopted
     s.set_adopted(a, True)                           # user edit -> choice is kept from now on
-    s.rescore((1, 0, 0))
+    s.rescore(0.5)
     assert a.is_adopted and b.is_adopted
 
 
@@ -309,7 +296,7 @@ def test_label_top_level_fields():  # A7
     assert label["algorithm"] == ALGORITHM_VERSION and label["root"] == str(Path("/r"))
     assert set(label["groups"][0]) == {
         "id", "files", "picked", "recommended", "reviewed", "edited"}
-    assert label["weights"] == list(W)
+    assert label["sensitivity"] == W
     assert all(g["edited"] is False for g in label["groups"])  # untouched groups
 
 

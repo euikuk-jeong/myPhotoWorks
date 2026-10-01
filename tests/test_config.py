@@ -29,8 +29,7 @@ class TestSaveSettings:
             "output_prefix", "output_suffix", "output_quality",
             "grouping_mode", "similarity_slider", "time_gap",
             "global_clustering", "use_exif_hints",
-            "weight_sharpness", "weight_exposure", "weight_color",
-            "show_reason", "show_score", "grouping_ui_version",
+            "recommend_sensitivity", "show_reason", "grouping_ui_version",
         }
         assert expected_keys == set(data.keys())
 
@@ -159,8 +158,7 @@ class TestGroupingSettingsRoundTrip:
 
         s = AppSettings(
             grouping_mode=GroupingMode.TIME_FIRST, similarity_slider=70, time_gap=3.5,
-            weight_sharpness=0.2, weight_exposure=0.5, weight_color=0.3,
-            show_reason=False, show_score=False,
+            recommend_sensitivity=0.6, show_reason=False,
         )
         cfg = {}
         save_settings(cfg, s)
@@ -168,8 +166,8 @@ class TestGroupingSettingsRoundTrip:
         assert loaded.grouping_mode == GroupingMode.TIME_FIRST
         assert loaded.similarity_slider == 70
         assert loaded.time_gap == 3.5
-        assert loaded.weights() == (0.2, 0.5, 0.3)
-        assert loaded.show_reason is False and loaded.show_score is False
+        assert loaded.recommend_sensitivity == 0.6
+        assert loaded.show_reason is False
 
     def test_old_config_without_grouping_keys_uses_defaults(self):
         from myphotoworks.core.grouping import GroupingMode
@@ -179,7 +177,7 @@ class TestGroupingSettingsRoundTrip:
         loaded = load_settings(cfg)
         assert loaded.brightness == 5
         assert loaded.grouping_mode == GroupingMode.AUTO
-        assert loaded.weights() == (0.5, 0.3, 0.2)
+        assert loaded.recommend_sensitivity == 1.0
 
 
 class TestExifHintDefault:

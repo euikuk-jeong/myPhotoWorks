@@ -13,6 +13,7 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from myphotoworks.core.ranking import recommend as v2_recommend
 from myphotoworks.core.scoring import (
     ALGORITHM_VERSION,
     DEFAULT_WEIGHTS,
@@ -25,7 +26,8 @@ logger = logging.getLogger(__name__)
 
 MAX_ERRORS = 5
 
-Ranker = Callable[[list[QualityScores], Weights], list[int]]
+# (scores, label weights, label sensitivity) -> member indices, best first
+Ranker = Callable[[list[QualityScores], Weights, float], list[int]]
 ScoreFn = Callable[[Path], QualityScores]
 
 
@@ -39,7 +41,25 @@ def baseline_rank(scores: list[QualityScores], weights: Weights = DEFAULT_WEIGHT
     return sorted(range(len(scores)), key=lambda i: (-totals[i], i))
 
 
-RANKERS: dict[str, Ranker] = {"baseline": baseline_rank}
+def v2_rank(scores: list[QualityScores], deadband_scale: float = 1.0) -> list[int]:
+    """Recommendation v2 order, best first: the chain's pick, then the pick of the rest, ..."""
+    left = list(range(len(scores)))
+    order: list[int] = []
+    while left:
+        pick = v2_recommend([scores[i] for i in left], deadband_scale).index
+        order.append(left.pop(pick))
+    return order
+
+
+def v2_tie(scores: list[QualityScores], deadband_scale: float = 1.0) -> bool:
+    """True when v2 calls the group a tie ("차이 미미")."""
+    return v2_recommend(scores, deadband_scale).tie
+
+
+RANKERS: dict[str, Ranker] = {
+    "baseline": lambda scores, weights, sensitivity: baseline_rank(scores, weights),
+    "v2": lambda scores, weights, sensitivity: v2_rank(scores, sensitivity),
+}
 
 
 @dataclass
@@ -51,6 +71,7 @@ class GroupResult:
     pair_total: int = 0
     pair_correct: int = 0
     edited: bool = False
+    tie: bool | None = None   # v2 only: the group was a "차이 미미" tie
 
 
 def judge_group(
@@ -102,6 +123,7 @@ def evaluate(
     for label in labels:
         root = Path(root_override if root_override is not None else label["root"])
         weights = tuple(label.get("weights", DEFAULT_WEIGHTS))
+        sensitivity = float(label.get("sensitivity", 1.0))
         made_with = label.get("algorithm")
         if made_with is not None and made_with != ALGORITHM_VERSION:
             report.warnings.append(
@@ -130,10 +152,11 @@ def evaluate(
                 continue
             pairs = [(index[w], index[lo]) for w, lo in g.get("pairs", [])
                      if w in index and lo in index]
-            t1, t2, pt, pc = judge_group(ranker(scores, weights), picked, pairs)
+            t1, t2, pt, pc = judge_group(ranker(scores, weights, sensitivity), picked, pairs)
             report.results.append(
                 GroupResult(len(files), list(g.get("tags", [])), t1, t2, pt, pc,
-                            bool(g.get("edited", False)))
+                            bool(g.get("edited", False)),
+                            v2_tie(scores, sensitivity) if algo == "v2" else None)
             )
     return report
 
@@ -158,7 +181,8 @@ def summarize(report: Report) -> dict:
             by_tag[t].append(r)
     pair_total = sum(r.pair_total for r in report.results)
     pair_correct = sum(r.pair_correct for r in report.results)
-    return {
+    ties = [r.tie for r in report.results if r.tie is not None]
+    summary = {
         "overall": _rate(report.results),
         # a 2-photo group is always a top-2 hit, so top2 is also given without them
         "top2_size3plus": _rate([r for r in report.results if r.size >= 3]),
@@ -176,6 +200,9 @@ def summarize(report: Report) -> dict:
         "errors": report.errors,
         "warnings": sorted(set(report.warnings)),
     }
+    if ties:   # share of groups v2 could not separate ("차이 미미")
+        summary["tie_rate"] = sum(ties) / len(ties)
+    return summary
 
 
 def load_label(path: Path) -> dict:
@@ -183,9 +210,13 @@ def load_label(path: Path) -> dict:
 
 
 def score_file(path: Path) -> QualityScores:
-    """Scores exactly as the grouping run computes them, without correction settings."""
+    """Scores exactly as the grouping run computes them, without correction settings, plus the
+    legacy whole-frame values the ``baseline`` ranker needs."""
+    from dataclasses import replace
+
     from myphotoworks.core.analysis_image import load_analysis_image
-    from myphotoworks.core.scoring import score_images
+    from myphotoworks.core.scoring import exposure_score, score_images, sharpness_score
 
     raw = load_analysis_image(path)
-    return score_images(raw, raw)
+    return replace(score_images(raw, raw),
+                   sharpness=sharpness_score(raw), exposure=exposure_score(raw))

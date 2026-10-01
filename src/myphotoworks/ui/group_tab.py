@@ -19,7 +19,7 @@ from PyQt6.QtWidgets import (
 )
 
 from myphotoworks.core.grouping import GroupingMode
-from myphotoworks.core.scoring import DEFAULT_WEIGHTS, normalize_weights
+from myphotoworks.core.ranking import SENSITIVITY_CHOICES
 from myphotoworks.dev.labels import is_dev_mode
 from myphotoworks.models.settings import AppSettings
 from myphotoworks.ui.guide import open_guide
@@ -54,26 +54,6 @@ def similarity_level(value: int) -> tuple[str, str]:
     return _SIMILARITY_LEVELS[-1][1], _SIMILARITY_LEVELS[-1][2]
 
 
-def rebalance_weights(values: list[int], index: int, new: int) -> list[int]:
-    """Set ``values[index]`` to ``new`` (0–100) and resize the others so the sum is 100.
-
-    The others keep their ratio to each other; when they are all 0 they split evenly.
-    """
-    new = max(0, min(100, new))
-    rest = 100 - new
-    others = [i for i in range(len(values)) if i != index]
-    total = sum(values[i] for i in others)
-    out = list(values)
-    out[index] = new
-    for i in others:
-        out[i] = round(rest * values[i] / total) if total else rest // len(others)
-    # rounding drift goes to the largest other slider
-    drift = 100 - sum(out)
-    if drift and others:
-        out[max(others, key=lambda i: out[i])] += drift
-    return out
-
-
 def _note(text: str) -> QLabel:
     label = QLabel(text)
     label.setWordWrap(True)
@@ -85,13 +65,13 @@ class GroupTab(QWidget):
     """Signals
     -------
     changed()            — a setting changed (persist it)
-    weights_changed()    — recommendation weights changed (rescore, no decoding)
-    display_changed()    — reason/score display options changed
+    sensitivity_changed()— recommendation sensitivity changed (rescore, no decoding)
+    display_changed()    — reason display option changed
     run_requested() / cancel_requested() / review_requested() / rescore_requested()
     """
 
     changed = pyqtSignal()
-    weights_changed = pyqtSignal()
+    sensitivity_changed = pyqtSignal()
     display_changed = pyqtSignal()
     run_requested = pyqtSignal()
     cancel_requested = pyqtSignal()
@@ -257,14 +237,11 @@ class GroupTab(QWidget):
 
         box.addWidget(QLabel("사진에 표시할 정보"))
         self._reason_cb = QCheckBox("추천 이유 표시")
-        self._score_cb = QCheckBox("품질 점수 표시")
         self._reason_cb.toggled.connect(self._on_display)
-        self._score_cb.toggled.connect(self._on_display)
         box.addWidget(self._reason_cb)
-        box.addWidget(self._score_cb)
 
         self._adv_btn = QToolButton()
-        self._adv_btn.setText("추천 기준 가중치 (고급)")
+        self._adv_btn.setText("추천 민감도 (고급)")
         self._adv_btn.setCheckable(True)
         self._adv_btn.setArrowType(Qt.ArrowType.RightArrow)
         self._adv_btn.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
@@ -274,28 +251,16 @@ class GroupTab(QWidget):
         self._adv_box = QWidget()
         adv = QVBoxLayout(self._adv_box)
         adv.setContentsMargins(0, 0, 0, 0)
-        adv.addWidget(_note("추천 사진을 고를 때 무엇을 더 중요하게 볼지 정합니다."))
-        self._w_sliders: list[QSlider] = []
-        self._w_labels: list[QLabel] = []
-        for name in ("선명도", "노출", "색감"):
-            r = QHBoxLayout()
-            name_lbl = QLabel(name)
-            name_lbl.setFixedWidth(48)  # same slider length for every row
-            r.addWidget(name_lbl)
-            s = QSlider(Qt.Orientation.Horizontal)
-            s.setRange(0, 100)
-            s.valueChanged.connect(self._on_weight)
-            lbl = QLabel()
-            lbl.setFixedWidth(44)
-            r.addWidget(s, 1)
-            r.addWidget(lbl)
-            adv.addLayout(r)
-            self._w_sliders.append(s)
-            self._w_labels.append(lbl)
-        adv.addWidget(_note("합계 100%로 자동 조정 · 직접 수정한 그룹의 채택은 유지됩니다"))
-        self._reset_btn = QPushButton("기본값 복원")
-        self._reset_btn.clicked.connect(self._on_reset_weights)
-        adv.addWidget(self._reset_btn, 0, Qt.AlignmentFlag.AlignLeft)
+        adv.addWidget(_note(
+            "비슷한 사진끼리 얼마나 작은 차이까지 구별할지 정합니다. 높을수록 작은 차이로도 "
+            "추천이 갈리고, 낮을수록 '차이 미미'로 보는 경우가 늘어납니다."
+        ))
+        self._sens_combo = QComboBox()
+        for scale, name in SENSITIVITY_CHOICES:
+            self._sens_combo.addItem(name, scale)
+        self._sens_combo.currentIndexChanged.connect(self._on_sensitivity)
+        adv.addWidget(self._sens_combo)
+        adv.addWidget(_note("직접 수정한 그룹의 채택은 유지됩니다"))
         self._adv_box.setVisible(False)
         box.addWidget(self._adv_box)
         return self._recommend_box
@@ -313,19 +278,17 @@ class GroupTab(QWidget):
         self._mode_combo.setCurrentIndex(max(0, idx))
         self._sim_slider.setValue(s.similarity_slider)
         self._gap_spin.setValue(s.time_gap)
-        for slider, w in zip(self._w_sliders, normalize_weights(s.weights()), strict=True):
-            slider.setValue(round(w * 100))
+        self._sens_combo.setCurrentIndex(self._sensitivity_index(s.recommend_sensitivity))
         self._global_cb.setChecked(s.global_clustering)
         self._exif_cb.setChecked(s.use_exif_hints)
         self._reason_cb.setChecked(s.show_reason)
-        self._score_cb.setChecked(s.show_score)
         self._block(False)
         self._update_labels()
         self._apply_enabled()
 
     def _block(self, on: bool) -> None:
         for w in (self._mode_combo, self._sim_slider, self._gap_spin, self._reason_cb,
-                  self._score_cb, self._global_cb, self._exif_cb, *self._w_sliders):
+                  self._global_cb, self._exif_cb, self._sens_combo):
             w.blockSignals(on)
 
     def _update_labels(self) -> None:
@@ -334,9 +297,6 @@ class GroupTab(QWidget):
         self._sim_value.setText(f"현재: {name}")
         self._sim_text.setText(text)
         self._mode_hint.setText(_MODE_HINT[s.grouping_mode])
-        norm = normalize_weights(s.weights())
-        for lbl, w in zip(self._w_labels, norm, strict=True):
-            lbl.setText(f"{round(w * 100)}%")
 
     # ---------------------------------------------------------------- handlers
 
@@ -366,35 +326,18 @@ class GroupTab(QWidget):
         self._settings.time_gap = float(value)
         self.changed.emit()
 
-    def _on_weight(self, value: int) -> None:
-        moved = self.sender()
-        if moved in self._w_sliders:
-            # keep the total at 100: the other two sliders give way in proportion
-            values = rebalance_weights([s.value() for s in self._w_sliders],
-                                       self._w_sliders.index(moved), value)
-            for s, v in zip(self._w_sliders, values, strict=True):
-                if s is not moved:
-                    s.blockSignals(True)
-                    s.setValue(v)
-                    s.blockSignals(False)
-        a, b, c = (s.value() / 100.0 for s in self._w_sliders)
-        self._settings.weight_sharpness = a
-        self._settings.weight_exposure = b
-        self._settings.weight_color = c
-        self._update_labels()
-        self.changed.emit()
-        self.weights_changed.emit()
+    def _sensitivity_index(self, scale: float) -> int:
+        """Combo row whose step is closest to ``scale``."""
+        steps = [self._sens_combo.itemData(i) for i in range(self._sens_combo.count())]
+        return min(range(len(steps)), key=lambda i: abs(steps[i] - scale))
 
-    def _on_reset_weights(self) -> None:
-        for s, w in zip(self._w_sliders, DEFAULT_WEIGHTS, strict=True):
-            s.blockSignals(True)
-            s.setValue(round(w * 100))
-            s.blockSignals(False)
-        self._on_weight(0)
+    def _on_sensitivity(self, _index: int) -> None:
+        self._settings.recommend_sensitivity = float(self._sens_combo.currentData())
+        self.changed.emit()
+        self.sensitivity_changed.emit()
 
     def _on_display(self, _checked: bool) -> None:
         self._settings.show_reason = self._reason_cb.isChecked()
-        self._settings.show_score = self._score_cb.isChecked()
         self.changed.emit()
         self.display_changed.emit()
 

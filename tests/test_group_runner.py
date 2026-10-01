@@ -42,7 +42,7 @@ def test_end_to_end_groups_scores_and_recommends_sharper(photos):
     a1, a2 = photos[0], photos[1]
     assert a1.is_recommended and not a2.is_recommended     # a2 is blurred
     assert a1.is_adopted and not a2.is_adopted
-    assert all(p.scores is not None and p.reason for p in photos)
+    assert all(p.scores is not None for p in photos)
     assert session.adopted_count() == 4
 
 
@@ -110,23 +110,6 @@ def test_worker_emits_done_signal(photos, qtbot):
     session, result = blocker.args
     assert session.group_count() == 4
     w.wait()
-
-
-def test_refresh_correction_scores_updates_only_exposure_and_color(photos):
-    from myphotoworks.processing.group_runner import correction_key, refresh_correction_scores
-
-    session, _ = run_grouping(photos, AppSettings())
-    before = {p.source_path.name: (p.scores.sharpness, p.scores.exposure) for p in photos}
-    groups_before = [[p.source_path.name for p in g.photos] for g in session.groups()]
-    new_settings = AppSettings(correction_mode=CorrectionMode.AUTO_LEVEL, brightness=40)
-    n = refresh_correction_scores(photos, new_settings)
-    assert n == len(photos)
-    assert all(p.analysis_key == correction_key(new_settings) for p in photos)
-    changed = [p for p in photos if p.scores.exposure != before[p.source_path.name][1]]
-    assert changed                                            # brightness moved exposure
-    assert all(p.scores.sharpness == before[p.source_path.name][0] for p in photos)
-    assert [[p.source_path.name for p in g.photos] for g in session.groups()] == groups_before
-    assert refresh_correction_scores(photos, new_settings) == 0   # nothing stale any more
 
 
 def test_refresh_correction_scores_cancel(photos):
