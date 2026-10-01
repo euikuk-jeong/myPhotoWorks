@@ -8,6 +8,7 @@ from collections.abc import Callable
 from PIL import Image
 
 from myphotoworks.core.analysis_image import load_analysis_image
+from myphotoworks.core.faces import FaceEngine, get_face_engine
 from myphotoworks.core.grouping import (
     GroupingParams,
     GroupingResult,
@@ -80,16 +81,26 @@ def refresh_correction_scores(
     return len(todo)
 
 
+def _build_face_engine(factory: Callable[[], FaceEngine | None]) -> FaceEngine | None:
+    try:
+        return factory()
+    except Exception as e:  # a broken factory must not stop the analysis
+        logger.warning("face engine could not be created: %s", e)
+        return None
+
+
 def run_grouping(
     photos: list[PhotoItem],
     settings: AppSettings,
     progress: ProgressCb | None = None,
     is_cancelled: Callable[[], bool] | None = None,
+    face_engine_factory: Callable[[], FaceEngine | None] = get_face_engine,
 ) -> tuple[GroupSession, GroupingResult]:
     """Analyse (cached per correction settings), group, and return a fresh GroupSession.
 
-    Photos that cannot be decoded become single ungrouped entries without scores.
-    Raises Cancelled when ``is_cancelled`` turns true between photos.
+    Photos that cannot be decoded become single ungrouped entries without scores. The face engine
+    is built once per run by ``face_engine_factory`` (only if some photo needs analysing); no
+    engine means no faces. Raises Cancelled when ``is_cancelled`` turns true between photos.
     """
     key = correction_key(settings)
     scoring_settings = dataclasses.replace(settings, resize_enabled=False)
@@ -100,6 +111,8 @@ def run_grouping(
 
     total = len(photos)
     failed: list[int] = []
+    pending = any(p.analysis is None or p.analysis_key != key for p in photos)
+    engine = _build_face_engine(face_engine_factory) if pending else None
     for n, photo in enumerate(photos, start=1):
         if is_cancelled and is_cancelled():
             raise Cancelled
@@ -110,7 +123,7 @@ def run_grouping(
         try:
             photo.analysis = analyze_photo(
                 photo.source_path, read_taken_at(photo.source_path),
-                read_hints(photo.source_path), correct,
+                read_hints(photo.source_path), correct, face_engine=engine,
             )
             photo.analysis_key = key
         except Exception as e:  # unreadable / corrupt file

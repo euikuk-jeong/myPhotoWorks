@@ -1,7 +1,8 @@
 """Subject region detection on a small grayscale analysis copy (pure NumPy, no Qt).
 
-Stage-1 chain: sharpest area -> centre. Later stages insert more sources (faces, AF point)
-in front of it, so callers only depend on ``SubjectRegion`` and its ``source`` label.
+Chain: main faces (stage 2) -> sharpest area -> centre. Later stages insert more sources (AF
+point) in front of the sharpest area, so callers only depend on ``SubjectRegion`` and its
+``source`` label.
 """
 from __future__ import annotations
 
@@ -20,7 +21,7 @@ class SubjectRegion:
     """Where the subject is. ``bbox`` = (x0, y0, x1, y1) in pixels, x1/y1 exclusive."""
 
     bbox: tuple[int, int, int, int]
-    source: str            # "sharpest" | "center"
+    source: str            # "face" | "sharpest" | "center"
     confidence: float      # 0..1
 
 
@@ -44,15 +45,32 @@ def _center_box(h: int, w: int) -> tuple[int, int, int, int]:
     return mx, my, max(mx + 1, w - mx), max(my + 1, h - my)
 
 
-def detect_subject(gray: np.ndarray) -> SubjectRegion:
-    """Find the sharpest area of ``gray`` (2-D float array, 0..255).
+def _face_region(h: int, w: int, face_boxes) -> SubjectRegion | None:
+    """Union of the face boxes clipped to the image, or ``None`` when no box is inside it."""
+    clipped = [(max(0, x0), max(0, y0), min(w, x1), min(h, y1)) for x0, y0, x1, y1 in face_boxes]
+    clipped = [b for b in clipped if b[2] > b[0] and b[3] > b[1]]
+    if not clipped:
+        return None
+    bbox = (min(b[0] for b in clipped), min(b[1] for b in clipped),
+            max(b[2] for b in clipped), max(b[3] for b in clipped))
+    return SubjectRegion(bbox, "face", 1.0)
 
-    Cells are ranked by mean gradient magnitude; cells connected to the strongest one with at
-    least ``GROW_RATIO`` of its energy form the subject. Confidence is how far the strongest
-    cell stands out from the typical one (1 - median / max), so a pan-focus scene where
-    everything is equally sharp scores low and falls back to the centre.
+
+def detect_subject(gray: np.ndarray, face_boxes=None) -> SubjectRegion:
+    """Find the subject of ``gray`` (2-D float array, 0..255).
+
+    Main-face boxes (``face_boxes``, pixels of ``gray``) win: the subject is their union.
+    Otherwise it is the sharpest area: cells are ranked by mean gradient magnitude; cells
+    connected to the strongest one with at least ``GROW_RATIO`` of its energy form the subject.
+    Confidence is how far the strongest cell stands out from the typical one
+    (1 - median / max), so a pan-focus scene where everything is equally sharp scores low and
+    falls back to the centre.
     """
     h, w = gray.shape
+    if face_boxes:
+        region = _face_region(h, w, face_boxes)
+        if region is not None:
+            return region
     small = downsample2(gray)
     sh, sw = small.shape
     if sh < 2 or sw < 2:

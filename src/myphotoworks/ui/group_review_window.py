@@ -1,6 +1,7 @@
 """GroupReviewWindow — compare photos per group, adopt several, edit groups, undo."""
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -44,7 +45,12 @@ from PyQt6.QtWidgets import (
 )
 
 from myphotoworks.core.analysis_image import load_analysis_image
-from myphotoworks.core.ranking import criterion_rows, recommend, sensitivity_label
+from myphotoworks.core.ranking import (
+    criterion_rows,
+    is_person_group,
+    recommend,
+    sensitivity_label,
+)
 from myphotoworks.models.group_session import (
     TAG_EDITED,
     TAG_REVIEWED,
@@ -540,29 +546,56 @@ class GroupReviewWindow(QWidget):
         self._bars: list[QProgressBar] = []
         self._bar_names: list[QLabel] = []
         self._bar_values: list[QLabel] = []
-        for name in ("주제 선명도", "주제 노출", "색감"):
-            row = QHBoxLayout()
-            name_label = QLabel(name)
-            row.addWidget(name_label)
-            row.addStretch()
-            value = QLabel()
-            row.addWidget(value)
-            box.addLayout(row)
-            bar = QProgressBar()
-            bar.setRange(0, 100)
-            bar.setTextVisible(False)
-            box.addWidget(bar)
-            box.addSpacing(6)
-            self._bars.append(bar)
-            self._bar_names.append(name_label)
-            self._bar_values.append(value)
+        self._score_box = box
+        self._rows_widget = self._build_rows(("주제 선명도", "주제 노출", "색감"))
+        box.addWidget(self._rows_widget)
 
+        self._face_label = QLabel()
+        self._face_label.setObjectName("hint-label")
+        self._face_label.setWordWrap(True)
+        self._face_label.hide()
+        box.addWidget(self._face_label)
         self._sens_label = QLabel()
         self._sens_label.setObjectName("hint-label")
         self._sens_label.setWordWrap(True)
         box.addWidget(self._sens_label)
         box.addStretch()
         return panel
+
+    def _build_rows(self, labels: Sequence[str]) -> QWidget:
+        """One name / value / bar row per criterion; fills ``_bars`` / ``_bar_names`` /
+        ``_bar_values`` (the stage-1 groups have three rows, person groups four)."""
+        self._bars, self._bar_names, self._bar_values = [], [], []
+        self._row_labels = tuple(labels)
+        holder = QWidget()
+        rows = QVBoxLayout(holder)
+        rows.setContentsMargins(0, 0, 0, 0)
+        rows.setSpacing(6)
+        for name in labels:
+            row = QHBoxLayout()
+            name_label = QLabel(name)
+            row.addWidget(name_label)
+            row.addStretch()
+            value = QLabel()
+            row.addWidget(value)
+            rows.addLayout(row)
+            bar = QProgressBar()
+            bar.setRange(0, 100)
+            bar.setTextVisible(False)
+            rows.addWidget(bar)
+            rows.addSpacing(6)
+            self._bars.append(bar)
+            self._bar_names.append(name_label)
+            self._bar_values.append(value)
+        return holder
+
+    def _set_rows(self, labels: Sequence[str]) -> None:
+        """Swap the criterion rows when the kind of group (subject / person) changes."""
+        old = self._rows_widget
+        self._rows_widget = self._build_rows(labels)
+        self._score_box.replaceWidget(old, self._rows_widget)
+        old.deleteLater()
+        self._rows_widget.show()
 
     @staticmethod
     def _section_title(text: str) -> QLabel:
@@ -695,6 +728,7 @@ class GroupReviewWindow(QWidget):
                 bar.setValue(0)
                 label.setText("-")
                 self._mark(name, bar, deciding=False, tied=False)
+            self._show_faces(None)
             self._sens_label.setText("분석하지 못한 사진입니다")
         rec = next((p for p in self._session.group(photo.group_id).photos if p.is_recommended),
                    None)
@@ -711,13 +745,33 @@ class GroupReviewWindow(QWidget):
         rec = recommend(table, scale)
         k = next(i for i, p in enumerate(scored) if p is photo)
         rows = criterion_rows(table, k, rec, scale)
+        labels = tuple(row.label for row in rows)
+        if labels != self._row_labels:
+            self._set_rows(labels)
+        # a photo without a face in a person group has no face values: "-", not a fake "0"
+        faceless = is_person_group(table) and table[k].faces is None
         for row, name, bar, label in zip(rows, self._bar_names, self._bars, self._bar_values,
                                          strict=True):
             bar.setValue(round(row.relative * 100))
-            label.setText(str(round(row.value)))
+            label.setText("-" if faceless else self._value_text(row))
             name.setText(f"{row.label} ≈" if row.tied else row.label)
             self._mark(name, bar, row.deciding, row.tied)
+        self._show_faces(table[k] if is_person_group(table) else None)
         self._sens_label.setText(f"민감도: {sensitivity_label(scale)}")
+
+    @staticmethod
+    def _value_text(row) -> str:
+        return f"{row.value * 100:.0f}%" if row.name == "smile" else str(round(row.value))
+
+    def _show_faces(self, scores) -> None:
+        """One line under the bars for a photo of a person group: people, blinks, smile."""
+        faces = scores.faces if scores is not None else None
+        if faces is None:
+            self._face_label.hide()
+            return
+        self._face_label.setText(f"주요 인물 {faces.count}명 · 눈 감음 {faces.closed_eyes}명"
+                                 f" · 웃음 {round(faces.smile * 100)}%")
+        self._face_label.show()
 
     @staticmethod
     def _mark(name: QLabel, bar: QProgressBar, deciding: bool, tied: bool) -> None:

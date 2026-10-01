@@ -73,3 +73,78 @@ def scores(sharp: float = 70.0, exposure: float = 70.0, color: float = 60.0, **k
     from myphotoworks.core.scoring import QualityScores
 
     return QualityScores(subject_sharpness=sharp, subject_exposure=exposure, color=color, **kw)
+
+
+# ---- stage 2: faces ------------------------------------------------------------------------
+
+# A face box (analysis-copy pixels) that is far above the 3 % width rule and fills ~14 % of the
+# frame width; ``PATCH`` above is the other box the scenes already use as a "subject".
+FACE = (100, 80, 220, 200)
+
+
+def blend(blink_l: float = 0.0, blink_r: float = 0.0,
+          smile_l: float = 0.0, smile_r: float = 0.0) -> dict[str, float]:
+    """MediaPipe face-blendshape dict with the four entries the algorithm reads."""
+    return {"eyeBlinkLeft": blink_l, "eyeBlinkRight": blink_r,
+            "mouthSmileLeft": smile_l, "mouthSmileRight": smile_r}
+
+
+def face_summary(n: int = 1, closed: int = 0, smile: float = 0.0, sharp: float = 70.0,
+                 exposure: float = 70.0, boxes=None):
+    """``FaceSummary`` of ``n`` main faces (imported lazily)."""
+    from myphotoworks.core.faces import FaceSummary
+
+    if boxes is None:
+        boxes = [(10 + 70 * i, 10, 70 + 70 * i, 70) for i in range(n)]
+    return FaceSummary(boxes=tuple(tuple(b) for b in boxes), closed_eyes=closed, smile=smile,
+                       sharpness=sharp, exposure=exposure)
+
+
+def person(closed: int = 0, smile: float = 0.0, face_sharp: float = 70.0,
+           face_exposure: float = 70.0, n: int | None = None, subject_sharp: float = 70.0,
+           subject_exposure: float = 70.0, color: float = 60.0, **kw):
+    """``QualityScores`` of a photo with ``n`` main faces (default: one, or as many as closed
+    eyes). Subject values are independent of the face values on purpose: the person chain must
+    read the face values."""
+    n = n if n is not None else max(1, closed)
+    return scores(subject_sharp, subject_exposure, color,
+                  faces=face_summary(n, closed, smile, face_sharp, face_exposure), **kw)
+
+
+class FakeFaceEngine:
+    """Stand-in for the MediaPipe engine (``detect`` + ``blendshapes``), no model needed.
+
+    ``detect`` returns ``boxes`` (analysis-copy pixels) for every photo. ``blendshapes`` answers
+    from ``shapes`` in call order (main faces are handled in detector order, photos in the order
+    they are analysed); when the list runs out it answers an open-eyed, neutral face. A ``None``
+    entry simulates "landmarker found no face in the crop". Everything it was asked is recorded.
+    """
+
+    def __init__(self, boxes=(), shapes=(), fail_detect: bool = False, fail_blend: bool = False):
+        self.boxes = [tuple(b) for b in boxes]
+        self.shapes = list(shapes)
+        self.fail_detect, self.fail_blend = fail_detect, fail_blend
+        self.detect_shapes: list[tuple] = []      # (h, w, channels) of each detect() input
+        self.detect_dtypes: list[str] = []
+        self.crop_sizes: list[tuple[int, int]] = []   # (w, h) of each blendshapes() input
+
+    def detect(self, rgb):
+        self.detect_shapes.append(tuple(rgb.shape))
+        self.detect_dtypes.append(str(rgb.dtype))
+        if self.fail_detect:
+            raise RuntimeError("detector exploded")
+        return list(self.boxes)
+
+    def blendshapes(self, rgb):
+        self.crop_sizes.append((rgb.shape[1], rgb.shape[0]))
+        if self.fail_blend:
+            raise RuntimeError("landmarker exploded")
+        k = len(self.crop_sizes) - 1
+        return self.shapes[k] if k < len(self.shapes) else blend()
+
+
+def box_with_area(area: float, x0: int = 0, y0: int = 0) -> tuple[int, int, int, int]:
+    """Square box of (about) ``area`` square pixels."""
+    side = round(area ** 0.5)
+    return (x0, y0, x0 + side, y0 + side)
+

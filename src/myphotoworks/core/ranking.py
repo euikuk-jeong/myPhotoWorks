@@ -21,6 +21,9 @@ COLOR_IGNORE_BELOW = 8.0       # a group whose most colourful photo is below thi
 EXPOSURE_FAIL = 10.0           # subject exposure below this: subject (almost) black / blown out
 SHARPNESS_FAIL = 15.0          # subject sharpness below this: no usable detail at all
 TIEBREAK_WEIGHTS = (0.6, 0.3, 0.1)   # sharpness / exposure / colour, only used for ties
+SMILE_DEADBAND = 0.15          # absolute smile (0..1): a smaller gap does not decide
+SMILE_PRESENT_TH = 0.30        # smile only counts as a criterion if someone in the group reaches it
+PERSON_TIEBREAK_WEIGHTS = (0.6, 0.3, 0.1)   # face sharpness / face exposure / smile (x100), ties
 
 # deadband multipliers behind the three sensitivity steps (low, normal, high)
 SENSITIVITY_CHOICES: tuple[tuple[float, str], ...] = ((1.5, "낮음"), (1.0, "보통"), (0.6, "높음"))
@@ -100,7 +103,53 @@ SUBJECT_SHARPNESS = Criterion(
 SUBJECT_EXPOSURE = Criterion("subject_exposure", lambda s: s.subject_exposure, EXPOSURE_DEADBAND)
 COLOR = Criterion("color", lambda s: s.color, COLOR_DEADBAND)
 
-_LABELS = {"subject_sharpness": "주제 선명도", "subject_exposure": "주제 노출", "color": "색감"}
+
+_LABELS = {"subject_sharpness": "주제 선명도", "subject_exposure": "주제 노출", "color": "색감",
+           "face_detected": "얼굴 인식", "closed_eyes": "눈 감음", "smile": "웃음",
+           "face_sharpness": "얼굴 선명도", "face_exposure": "얼굴 노출"}
+
+
+# ---- person chain (stage 2): a group where at least one photo has a main face ------------------
+
+FACE_DETECTED = Criterion("face_detected", lambda s: 1.0 if s.faces else 0.0, 0.0)
+CLOSED_EYES = Criterion("closed_eyes", lambda s: float(s.faces.closed_eyes) if s.faces else 0.0,
+                        0.0, higher_is_better=False)
+SMILE = Criterion("smile", lambda s: s.faces.smile if s.faces else 0.0, SMILE_DEADBAND)
+FACE_SHARPNESS = Criterion("face_sharpness", lambda s: s.faces.sharpness if s.faces else 0.0,
+                           SHARPNESS_DEADBAND, relative=True)
+FACE_EXPOSURE = Criterion("face_exposure", lambda s: s.faces.exposure if s.faces else 0.0,
+                          EXPOSURE_DEADBAND)
+
+
+def is_person_group(group: Sequence[QualityScores]) -> bool:
+    """True when any photo of the group has a main face (plan Q13): the group is then judged by
+    its people, and photos without a face rank behind those with one."""
+    return any(s.faces for s in group)
+
+
+def _smile_present(group: Sequence[QualityScores]) -> bool:
+    return max((s.faces.smile for s in group if s.faces), default=0.0) >= SMILE_PRESENT_TH
+
+
+def _person_chain(group: Sequence[QualityScores]) -> list[Criterion]:
+    chain = [FACE_DETECTED, CLOSED_EYES]
+    if _smile_present(group):
+        chain.append(SMILE)
+    return chain + [FACE_SHARPNESS, FACE_EXPOSURE]
+
+
+def _person_tiebreak(s: QualityScores) -> float:
+    if not s.faces:
+        return 0.0
+    ws, we, wm = PERSON_TIEBREAK_WEIGHTS
+    return ws * s.faces.sharpness + we * s.faces.exposure + wm * 100.0 * s.faces.smile
+
+
+def face_badges(s: QualityScores) -> list[str]:
+    """Per-photo face facts for the badge line of a person group: "눈 감음 N명" / "얼굴 없음"."""
+    if not s.faces:
+        return ["얼굴 없음"]
+    return [f"눈 감음 {s.faces.closed_eyes}명"] if s.faces.closed_eyes else []
 
 
 def _tiebreak(s: QualityScores) -> float:
@@ -131,9 +180,13 @@ def _pool(group: Sequence[QualityScores]) -> list[int]:
 
 
 def recommend(group: Sequence[QualityScores], deadband_scale: float = 1.0) -> Recommendation:
-    """Pick the photo to recommend from ``group`` (index into ``group``)."""
+    """Pick the photo to recommend from ``group`` (index into ``group``).
+
+    A group with a main face anywhere runs the person chain, any other group the subject chain."""
     if not group:
         raise ValueError("cannot recommend from an empty group")
+    if is_person_group(group):
+        return select_best(group, _person_chain(group), _person_tiebreak, deadband_scale)
     pool = _pool(group)
     members = [group[i] for i in pool]
     rec = select_best(members, _chain(members), _tiebreak, deadband_scale)
@@ -150,6 +203,8 @@ def reason_label(rec: Recommendation, group_size: int) -> str:
         return "차이 미미"
     if rec.deciding_criterion == "gate":
         return "다른 사진은 사용 어려움"
+    if rec.deciding_criterion == "closed_eyes":
+        return "눈 감음 적음"
     if rec.deciding_criterion in _LABELS:
         return f"{_LABELS[rec.deciding_criterion]} 우세"
     return ""
@@ -163,7 +218,11 @@ def criterion_rows(
 ) -> list[CriterionRow]:
     """Detail-panel data for ``group[index]``: each chain criterion relative to the group best,
     which one decided, and which ones could not tell the photos apart. "Could not tell apart"
-    is judged among the photos that actually competed in ``recommend`` (failed ones left out)."""
+    is judged among the photos that actually competed in ``recommend`` (failed ones left out).
+    A person group shows the four person criteria instead; a photo without a face gets empty
+    bars."""
+    if is_person_group(group):
+        return _person_rows(group, index, rec, deadband_scale)
     pool = [group[i] for i in _pool(group)]
     rows = []
     for c in (SUBJECT_SHARPNESS, SUBJECT_EXPOSURE, COLOR):
@@ -176,6 +235,32 @@ def criterion_rows(
                 or pool_best - min(pooled) <= _margin(c, pool_best, deadband_scale) + _EPS)
         value = c.key(group[index])
         relative = min(1.0, max(0.0, value / best)) if best > 0 else 1.0
+        rows.append(CriterionRow(c.name, _LABELS[c.name], value, relative,
+                                 rec.deciding_criterion == c.name, tied))
+    return rows
+
+
+def _person_rows(
+    group: Sequence[QualityScores], index: int, rec: Recommendation, deadband_scale: float
+) -> list[CriterionRow]:
+    """Detail rows of a person group. Everything is judged among the photos with a face (the
+    ones that competed). The bar of "눈 감음" is the share ``(fewest + 1) / (this photo's + 1)``:
+    full for the photo with the fewest closed eyes, shorter for more."""
+    competing = [s for s in group if s.faces]
+    photo = group[index]
+    rows = []
+    for c in (CLOSED_EYES, SMILE, FACE_SHARPNESS, FACE_EXPOSURE):
+        values = [c.key(s) for s in competing]
+        best = max(values) if c.higher_is_better else min(values)
+        skipped = c is SMILE and not _smile_present(group)
+        tied = skipped or max(values) - min(values) <= _margin(c, best, deadband_scale) + _EPS
+        value = c.key(photo)
+        if not photo.faces:
+            relative = 0.0
+        elif c is CLOSED_EYES:
+            relative = (best + 1) / (value + 1)
+        else:
+            relative = min(1.0, max(0.0, value / best)) if best > 0 else 1.0
         rows.append(CriterionRow(c.name, _LABELS[c.name], value, relative,
                                  rec.deciding_criterion == c.name, tied))
     return rows

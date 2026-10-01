@@ -33,7 +33,7 @@ class AboutDialog(QDialog):
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self.setWindowTitle("myPhotoWorks 정보")
-        self.setFixedSize(380, 360)
+        self.setFixedSize(380, 390)
         self.setWindowFlags(self.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint)
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
 
@@ -75,6 +75,12 @@ class AboutDialog(QDialog):
         layout.addWidget(desc_label)
 
         layout.addStretch()
+
+        # Third-party notice (face analysis)
+        notice_label = QLabel("얼굴 분석: Google MediaPipe (Apache License 2.0)")
+        notice_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        notice_label.setObjectName("hint-label")
+        layout.addWidget(notice_label)
 
         # Copyright
         copyright_label = QLabel("© 2025 euikuk-jeong. All rights reserved.")
