@@ -182,14 +182,12 @@ class MainWindow(QMainWindow):
         self._thumb_panel.photos_added.connect(self._on_photos_added)
         self._thumb_panel.photos_removed.connect(self._on_photos_removed)
         self._thumb_panel.adoption_toggle_requested.connect(self._on_adoption_toggle)
-        self._thumb_panel.set_options(
-            self._settings.show_reason, self._settings.show_score, self._settings.weights()
-        )
+        self._thumb_panel.set_options(self._settings.show_reason)
         splitter.addWidget(self._thumb_panel)
 
         self._settings_panel = SettingsPanel(self._settings)
         self._settings_panel.settings_changed.connect(self._on_settings_changed)
-        self._settings_panel.weights_changed.connect(self._on_weights_changed)
+        self._settings_panel.sensitivity_changed.connect(self._on_sensitivity_changed)
         self._settings_panel.display_changed.connect(self._on_display_changed)
         self._settings_panel.group_run_requested.connect(self._on_group_run)
         self._settings_panel.group_cancel_requested.connect(self._on_group_cancel)
@@ -463,9 +461,7 @@ class MainWindow(QMainWindow):
         self._session = session
         self._analysis_key = correction_key(self._settings)
         self._settings_panel.group_tab.set_stale(False)
-        self._thumb_panel.set_options(
-            self._settings.show_reason, self._settings.show_score, self._settings.weights()
-        )
+        self._thumb_panel.set_options(self._settings.show_reason)
         self._thumb_panel.set_session(session)
         self._set_grouping_busy(False)
         self._set_grouping_controls(True)
@@ -518,7 +514,7 @@ class MainWindow(QMainWindow):
         if self._session is None:
             return
         self._analysis_key = self._analysis_key_pending
-        self._session.rescore(self._settings.weights())
+        self._session.rescore(self._settings.recommend_sensitivity)
         self._check_stale_scores()
         self._on_review_changed()
         self._status_label.setText(f"노출·색감 점수를 다시 계산했습니다. ({count:,}장)")
@@ -528,17 +524,15 @@ class MainWindow(QMainWindow):
         if worker is not None:
             worker.deleteLater()
 
-    def _on_weights_changed(self) -> None:
+    def _on_sensitivity_changed(self) -> None:
         if self._session is None:
             return
-        self._session.rescore(self._settings.weights())
+        self._session.rescore(self._settings.recommend_sensitivity)
         self._on_display_changed()
         self._on_review_changed()
 
     def _on_display_changed(self) -> None:
-        self._thumb_panel.set_options(
-            self._settings.show_reason, self._settings.show_score, self._settings.weights()
-        )
+        self._thumb_panel.set_options(self._settings.show_reason)
         self._update_buttons()
 
     def _on_adoption_toggle(self, photo: PhotoItem, value: bool) -> None:

@@ -50,11 +50,5 @@ class AppSettings:
     time_gap: float = 2.0                # seconds
     global_clustering: bool = False      # compare against all groups, not just neighbours
     use_exif_hints: bool = True          # focal length / lens / aperture consistency
-    weight_sharpness: float = 0.5
-    weight_exposure: float = 0.3
-    weight_color: float = 0.2
+    recommend_sensitivity: float = 1.0   # deadband multiplier: 1.5 low / 1.0 normal / 0.6 high
     show_reason: bool = True
-    show_score: bool = True
-
-    def weights(self) -> tuple[float, float, float]:
-        return (self.weight_sharpness, self.weight_exposure, self.weight_color)

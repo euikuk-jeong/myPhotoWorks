@@ -16,7 +16,7 @@ from myphotoworks.core.grouping import (
     threshold_from_slider,
 )
 from myphotoworks.core.pipeline import analyze_photo
-from myphotoworks.core.scoring import QualityScores, color_score, exposure_score
+from myphotoworks.core.scoring import rescore_corrected
 from myphotoworks.models.group_session import GroupSession
 from myphotoworks.models.photo_item import PhotoItem
 from myphotoworks.models.settings import AppSettings
@@ -74,10 +74,7 @@ def refresh_correction_scores(
         except Exception as e:
             logger.warning("rescore failed for %s: %s", photo.source_path, e)
             continue
-        old = photo.analysis.scores
-        photo.analysis.scores = QualityScores(
-            old.sharpness, exposure_score(corrected), color_score(corrected)
-        )
+        photo.analysis.scores = rescore_corrected(photo.analysis.scores, raw, corrected)
         photo.scores = photo.analysis.scores
         photo.analysis_key = key
     return len(todo)
@@ -137,5 +134,5 @@ def run_grouping(
     for p in photos:
         p.scores = p.analysis.scores if p.analysis is not None else None
         p.is_adopted = p.is_recommended = False
-    session = GroupSession(photos, groups, settings.weights())
+    session = GroupSession(photos, groups, settings.recommend_sensitivity)
     return session, result

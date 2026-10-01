@@ -5,7 +5,8 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-from myphotoworks.core.scoring import ALGORITHM_VERSION, Weights, explain, recommend
+from myphotoworks.core.ranking import reason_label, recommend
+from myphotoworks.core.scoring import ALGORITHM_VERSION, is_blurry
 from myphotoworks.models.photo_item import PhotoItem
 
 TAG_REVIEWED = "추천 채택"
@@ -30,9 +31,11 @@ class GroupSession:
     and undoing it never touches unrelated groups.
     """
 
-    def __init__(self, photos: list[PhotoItem], groups: list[list[int]], weights: Weights) -> None:
+    def __init__(
+        self, photos: list[PhotoItem], groups: list[list[int]], sensitivity: float = 1.0
+    ) -> None:
         self._photos = photos
-        self._weights = weights
+        self._sensitivity = sensitivity
         self._order: list[int] = []
         self._members: dict[int, list[PhotoItem]] = {}
         self._next_id = 0
@@ -46,7 +49,7 @@ class GroupSession:
             self._members[gid] = [photos[i] for i in idxs]
             for i in idxs:
                 photos[i].group_id = gid
-        self.rescore(weights)
+        self.rescore(sensitivity)
 
     # ---- queries ---------------------------------------------------------
 
@@ -83,6 +86,11 @@ class GroupSession:
     @property
     def can_undo(self) -> bool:
         return bool(self._undo)
+
+    @property
+    def sensitivity(self) -> float:
+        """Deadband multiplier the recommendations were made with (normal = 1.0)."""
+        return self._sensitivity
 
     def to_label_dict(self, root: Path | None = None, source: str = "user") -> dict:
         """Snapshot of the user's decisions as an evaluation label (schema 1).
@@ -128,20 +136,20 @@ class GroupSession:
             "schema": 1,
             "source": source,
             "algorithm": ALGORITHM_VERSION,
-            "weights": list(self._weights),
+            "sensitivity": self._sensitivity,
             "root": os.fspath(root),
             "groups": groups,
         }
 
     # ---- scoring ---------------------------------------------------------
 
-    def rescore(self, weights: Weights) -> None:
+    def rescore(self, sensitivity: float) -> None:
         """Recompute recommendations from cached scores (no decoding).
 
         Untouched groups follow the new recommendation; groups the user edited keep their
         adoption state and only get updated recommendation badges.
         """
-        self._weights = weights
+        self._sensitivity = sensitivity
         for gid in self._order:
             self._refresh_recommendations(gid)
             if gid not in self._dirty:
@@ -208,7 +216,7 @@ class GroupSession:
                 self._dirty.discard(gid)
                 self._reviewed.discard(gid)
         self._undo.clear()
-        self.rescore(self._weights)
+        self.rescore(self._sensitivity)
 
     def mark_reviewed(self, gid: int) -> None:
         self._reviewed.add(gid)
@@ -283,7 +291,7 @@ class GroupSession:
         for p in list(self._members[absorb_gid]):
             self._move(p, absorb_gid, keep_gid)
         # The merged group starts over: only its new recommendation is adopted, and it follows
-        # the recommendation again (e.g. on weight changes) until the user edits it.
+        # the recommendation again (e.g. on sensitivity changes) until the user edits it.
         for p in self._members[keep_gid]:
             p.is_adopted = p.is_recommended if p.scores is not None else True
         self._dirty.discard(keep_gid)
@@ -307,7 +315,10 @@ class GroupSession:
         if not scored:
             return
         table = [p.scores for p in scored]
-        best = recommend(table, self._weights)
+        rec = recommend(table, self._sensitivity)
         for k, p in enumerate(scored):
-            p.is_recommended = k == best
-            p.reason = explain(k, table, self._weights)
+            p.is_recommended = k == rec.index
+            parts = [reason_label(rec, len(table))] if k == rec.index else []
+            if is_blurry(table[k], table):
+                parts.append("흐림")
+            p.reason = " · ".join(parts)

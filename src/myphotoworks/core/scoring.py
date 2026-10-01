@@ -1,28 +1,48 @@
-"""Quality scoring (sharpness / exposure / colour) and weighted recommendation."""
+"""Quality scores: subject-based sharpness / exposure (v2) next to the legacy whole-frame ones.
+
+``QualityScores.sharpness`` / ``exposure`` are the v1.4 whole-frame values. The app does not
+compute them; only the evaluation replay (``dev/eval_metrics.score_file``) fills them so the
+``baseline`` algorithm can still be measured. The recommendation itself (``core/ranking.py``)
+reads ``subject_sharpness`` / ``subject_exposure`` / ``color``.
+"""
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import numpy as np
 from PIL import Image
 
-TARGET_PIXELS = 200_000        # sharpness is measured at a fixed pixel count
-SHARP_VAR_CEIL = 1000.0        # Laplacian variance mapped to 100 (log scale)
+from myphotoworks.core.subject import SubjectRegion, detect_subject, downsample2, gradients
+
+TARGET_PIXELS = 200_000        # analysis copies are normalised to this pixel count
+SHARP_VAR_CEIL = 1000.0        # legacy: Laplacian variance mapped to 100 (log scale)
 IDEAL_MEAN = 118.0
-BLUR_ABS = 30.0                # sharpness below this is flagged as blur
+BLUR_ABS = 30.0                # subject sharpness below this is flagged as blur
 BLUR_REL = 0.6                 # ...or below this share of the group's best
-DEFAULT_WEIGHTS = (0.5, 0.3, 0.2)
-ALGORITHM_VERSION = "baseline"  # recorded in exported labels; bump when scoring changes
+DEFAULT_WEIGHTS = (0.5, 0.3, 0.2)   # legacy baseline weights
+ALGORITHM_VERSION = "v2-stage1"  # recorded in exported labels; bump when scoring changes
+
+SHARP_TOP_PERCENT = 2.0        # share of strongest edge pixels averaged for subject sharpness
+SHARP_GRAD_CEIL = 150.0        # gradient (grey levels / px at half resolution) mapped to 100
 
 Weights = tuple[float, float, float]
 
 
 @dataclass(frozen=True)
 class QualityScores:
-    sharpness: float
-    exposure: float
-    color: float
+    # legacy whole-frame scores (filled by the evaluation replay only; 0 in the app)
+    sharpness: float = 0.0
+    exposure: float = 0.0
+    color: float = 0.0
+    # v2 subject-based scores
+    subject_sharpness: float = 0.0
+    subject_exposure: float = 0.0
+    subject_source: str = "center"   # which SubjectRegion source produced the numbers above
+    motion_ratio: float = 1.0        # 0 = one-directional smear (shake), 1 = isotropic; stored only
+    # subject box in the pixel-normalised analysis copy, so a correction change can re-measure
+    # the subject's exposure without detecting the subject (or decoding) again
+    subject_bbox: tuple[int, int, int, int] | None = None
 
 
 def _normalize_pixels(img: Image.Image) -> Image.Image:
@@ -62,9 +82,106 @@ def color_score(img: Image.Image) -> float:
     return min(100.0, colorfulness / 60.0 * 100.0)
 
 
+def _normalized_size(size: tuple[int, int]) -> tuple[int, int]:
+    """Size ``_normalize_pixels`` would give an image of ``size``."""
+    w, h = size
+    if w * h <= TARGET_PIXELS:
+        return size
+    scale = math.sqrt(TARGET_PIXELS / (w * h))
+    return max(1, round(w * scale)), max(1, round(h * scale))
+
+
+def _crop(gray: np.ndarray, region: SubjectRegion) -> np.ndarray:
+    x0, y0, x1, y1 = region.bbox
+    h, w = gray.shape
+    return gray[max(0, y0):max(1, min(h, y1)), max(0, x0):max(1, min(w, x1))]
+
+
+def _subject_gradients(gray: np.ndarray, region: SubjectRegion):
+    """Gradients of the 2x2-averaged subject crop, or ``None`` when it is too small to have any."""
+    small = downsample2(_crop(gray, region))
+    return gradients(small) if small.size else None
+
+
+def subject_sharpness(gray: np.ndarray, region: SubjectRegion) -> float:
+    """0..100 edge strength of the subject: mean of the strongest gradients inside ``region``.
+
+    The region is averaged 2x2 first and only the top ``SHARP_TOP_PERCENT`` % of the gradient
+    magnitudes count, so film grain (uniform, weak after averaging) hardly lifts an out-of-focus
+    shot, while a sharp subject on a blurred background is judged by the subject alone.
+    ``gray`` is an analysis copy (long side <= ~512 px); values are scale dependent. A subject
+    crop under 2x2 px has no measurable edges and scores 0.
+    """
+    grads = _subject_gradients(gray, region)
+    if grads is None:
+        return 0.0
+    mag = np.hypot(*grads).ravel()
+    k = max(1, int(round(mag.size * SHARP_TOP_PERCENT / 100.0)))
+    top = float(np.partition(mag, mag.size - k)[mag.size - k:].mean())
+    return 100.0 * min(1.0, math.sqrt(top / SHARP_GRAD_CEIL))
+
+
+def motion_ratio(gray: np.ndarray, region: SubjectRegion) -> float:
+    """0..1 ratio of the weaker to the stronger directional gradient energy of the subject.
+
+    Camera shake smears detail along one direction, which drives the ratio towards 0; an
+    isotropic texture gives about 1. Flat or too small input has no direction and returns 1.
+    """
+    grads = _subject_gradients(gray, region)
+    if grads is None:
+        return 1.0
+    gx, gy = grads
+    ex, ey = float((gx * gx).sum()), float((gy * gy).sum())
+    hi = max(ex, ey)
+    return 1.0 if hi <= 1e-9 else min(ex, ey) / hi
+
+
+def subject_exposure(gray: np.ndarray, region: SubjectRegion) -> float:
+    """0..100 exposure of the subject only: mean far from mid-grey and clipping *inside* it
+    cost points; a blown-out background or deep shadows elsewhere do not."""
+    g = _crop(gray, region)
+    deviation = abs(float(g.mean()) - IDEAL_MEAN) / IDEAL_MEAN
+    clipped = float(((g < 5) | (g > 250)).mean())
+    return 100.0 * max(0.0, 1.0 - min(1.0, 0.7 * deviation + 3.0 * clipped))
+
+
+def _gray_on_grid(img: Image.Image, size: tuple[int, int]) -> np.ndarray:
+    """Float grey copy of ``img`` on the pixel grid ``size`` (the normalised analysis size)."""
+    fixed = img if img.size == size else img.resize(size, Image.Resampling.LANCZOS)
+    return np.asarray(fixed.convert("L"), dtype=np.float64)
+
+
 def score_images(raw: Image.Image, corrected: Image.Image) -> QualityScores:
-    """Sharpness from the uncorrected image, exposure/colour from the corrected one."""
-    return QualityScores(sharpness_score(raw), exposure_score(corrected), color_score(corrected))
+    """Subject sharpness / motion from the uncorrected image, subject exposure and colour from
+    the corrected one. The subject is found once on the uncorrected copy. The legacy whole-frame
+    ``sharpness`` / ``exposure`` stay 0 here; only the evaluation replay fills them."""
+    small = _normalize_pixels(raw)
+    gray = np.asarray(small.convert("L"), dtype=np.float64)
+    region = detect_subject(gray)
+    return QualityScores(
+        color=color_score(corrected),
+        subject_sharpness=subject_sharpness(gray, region),
+        subject_exposure=subject_exposure(_gray_on_grid(corrected, small.size), region),
+        subject_source=region.source,
+        motion_ratio=motion_ratio(gray, region),
+        subject_bbox=region.bbox,
+    )
+
+
+def rescore_corrected(
+    old: QualityScores, raw: Image.Image, corrected: Image.Image
+) -> QualityScores:
+    """New subject exposure / colour after the correction settings changed. Everything measured
+    on the uncorrected image (sharpness, subject, motion) is kept."""
+    gray = _gray_on_grid(corrected, _normalized_size(raw.size))
+    h, w = gray.shape
+    x0, y0, x1, y1 = old.subject_bbox or (0, 0, w, h)
+    region = SubjectRegion((x0, y0, x1, y1), old.subject_source, 1.0)
+    return replace(
+        old,
+        color=color_score(corrected),
+        subject_exposure=subject_exposure(gray, region),
+    )
 
 
 def normalize_weights(weights: Weights) -> Weights:
@@ -76,37 +193,19 @@ def normalize_weights(weights: Weights) -> Weights:
 
 
 def composite(scores: QualityScores, weights: Weights) -> float:
+    """Legacy (v1.4) weighted sum of the whole-frame scores; used by the baseline replay."""
     ws, we, wc = normalize_weights(weights)
     return ws * scores.sharpness + we * scores.exposure + wc * scores.color
 
 
 def recommend(group: list[QualityScores], weights: Weights) -> int:
-    """Index of the best photo in ``group`` (first wins ties)."""
+    """Legacy (v1.4) pick: index of the best weighted sum, first wins ties (baseline replay)."""
     totals = [composite(s, weights) for s in group]
     return max(range(len(group)), key=lambda i: (totals[i], -i))
 
 
 def is_blurry(scores: QualityScores, group: list[QualityScores]) -> bool:
-    best = max(s.sharpness for s in group)
-    return scores.sharpness < BLUR_ABS or (len(group) > 1 and scores.sharpness < BLUR_REL * best)
-
-
-def explain(index: int, group: list[QualityScores], weights: Weights) -> str:
-    """Short Korean reason label for why ``index`` is (or is not) the pick of its group."""
-    s = group[index]
-    if len(group) == 1:
-        parts = ["단독 사진"]
-    elif index == recommend(group, weights):
-        parts = []
-        if s.sharpness >= max(x.sharpness for x in group):
-            parts.append("선명도 1위")
-        parts.append("종합 1위")
-    else:
-        parts = [f"종합 {round(composite(s, weights))}점"]
-    if is_blurry(s, group):
-        parts.append("흐림")
-    if s.exposure >= 75:
-        parts.append("노출 양호")
-    elif s.exposure < 45:
-        parts.append("노출 부적절")
-    return " · ".join(parts)
+    best = max(s.subject_sharpness for s in group)
+    return scores.subject_sharpness < BLUR_ABS or (
+        len(group) > 1 and scores.subject_sharpness < BLUR_REL * best
+    )

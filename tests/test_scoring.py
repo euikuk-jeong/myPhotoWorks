@@ -1,13 +1,13 @@
 import numpy as np
 from PIL import Image, ImageFilter
 
+# Whole-frame scores and the weighted sum are the v1.4 "baseline" kept for evaluation replays;
+# the subject-based scores are tested in test_scoring_v2.py.
 from myphotoworks.core.scoring import (
     QualityScores,
     color_score,
     composite,
-    explain,
     exposure_score,
-    is_blurry,
     normalize_weights,
     recommend,
     score_images,
@@ -56,12 +56,24 @@ def test_color_score_gray_lower_than_saturated():
     assert color_score(gray) == 0.0
 
 
-def test_exposure_color_use_corrected_image_but_sharpness_uses_raw():
+def test_app_scoring_leaves_the_legacy_whole_frame_fields_to_the_evaluation_replay():
     raw = textured()
     dark = Image.new("RGB", raw.size, (5, 5, 5))
     s = score_images(raw, dark)
-    assert s.sharpness == sharpness_score(raw)
-    assert s.exposure == exposure_score(dark)
+    assert s.color == color_score(dark)
+    assert (s.sharpness, s.exposure) == (0.0, 0.0)
+
+
+def test_score_file_fills_the_legacy_fields_for_the_baseline_replay(tmp_path):
+    from myphotoworks.core.analysis_image import load_analysis_image
+    from myphotoworks.dev.eval_metrics import score_file
+
+    path = tmp_path / "t.png"
+    textured().save(path)
+    analysis = load_analysis_image(path)           # what the scoring run actually looks at
+    s = score_file(path)
+    assert s.sharpness == sharpness_score(analysis) and s.exposure == exposure_score(analysis)
+    assert s.subject_sharpness > 0
 
 
 def test_weights_normalise_and_zero_falls_back_to_default():
@@ -81,14 +93,3 @@ def test_recommend_follows_weights_without_any_image():
 def test_recommend_tie_prefers_first():
     s = QualityScores(50, 50, 50)
     assert recommend([s, s, s], (0.5, 0.3, 0.2)) == 0
-
-
-def test_blur_flag_and_explain_labels():
-    g = [QualityScores(85, 80, 70), QualityScores(45, 80, 70), QualityScores(20, 80, 70)]
-    assert not is_blurry(g[0], g)
-    assert is_blurry(g[1], g)   # < 60% of the group's best
-    assert is_blurry(g[2], g)   # absolute floor
-    w = (0.5, 0.3, 0.2)
-    assert "선명도 1위" in explain(0, g, w)
-    assert "흐림" in explain(2, g, w)
-    assert explain(0, [g[0]], w).startswith("단독 사진")

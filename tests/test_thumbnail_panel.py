@@ -99,7 +99,7 @@ def test_clicking_checkbox_requests_adoption_toggle(qtbot, tmp_path):
 
     panel = _loaded_panel(qtbot, tmp_path)
     photo = panel.all_photos()[0]
-    panel.set_session(GroupSession([photo], [[0]], (0.5, 0.3, 0.2)))
+    panel.set_session(GroupSession([photo], [[0]], 1.0))
     index = panel.model().index(0, 0)
     box = checkbox_rect(panel.itemDelegate().photo_rect(panel.visualRect(index), index))
     with qtbot.waitSignal(panel.adoption_toggle_requested, timeout=1000) as sig:

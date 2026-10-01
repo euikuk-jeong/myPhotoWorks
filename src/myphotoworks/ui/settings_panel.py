@@ -51,7 +51,7 @@ class SettingsPanel(QTabWidget):
     """
 
     settings_changed = pyqtSignal(object)
-    weights_changed = pyqtSignal()
+    sensitivity_changed = pyqtSignal()
     display_changed = pyqtSignal()
     group_run_requested = pyqtSignal()
     group_cancel_requested = pyqtSignal()
@@ -90,7 +90,7 @@ class SettingsPanel(QTabWidget):
 
         self.group_tab = GroupTab(self._settings)
         self.group_tab.changed.connect(self._emit)
-        self.group_tab.weights_changed.connect(self.weights_changed)
+        self.group_tab.sensitivity_changed.connect(self.sensitivity_changed)
         self.group_tab.display_changed.connect(self.display_changed)
         self.group_tab.run_requested.connect(self.group_run_requested)
         self.group_tab.cancel_requested.connect(self.group_cancel_requested)
@@ -100,7 +100,7 @@ class SettingsPanel(QTabWidget):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QScrollArea.Shape.NoFrame)
-        # always shown: expanding "추천 기준 가중치" must not narrow the content mid-click
+        # always shown: expanding "추천 민감도 (고급)" must not narrow the content mid-click
         scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
         scroll.setObjectName("groupScroll")  # styled in light_table.qss
         scroll.setWidget(self.group_tab)

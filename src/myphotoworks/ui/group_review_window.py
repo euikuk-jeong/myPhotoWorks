@@ -44,7 +44,7 @@ from PyQt6.QtWidgets import (
 )
 
 from myphotoworks.core.analysis_image import load_analysis_image
-from myphotoworks.core.scoring import composite
+from myphotoworks.core.ranking import criterion_rows, recommend, sensitivity_label
 from myphotoworks.models.group_session import (
     TAG_EDITED,
     TAG_REVIEWED,
@@ -320,8 +320,6 @@ class _Strip(QListWidget):
         self.setItemDelegate(_CardDelegate(self))
         # duck-typed panel attributes used by _CardDelegate
         self.grouping_active = True
-        self.show_score = True
-        self.weights = (0.5, 0.3, 0.2)
 
     def current_photo(self) -> PhotoItem | None:
         item = self.currentItem()
@@ -529,27 +527,23 @@ class GroupReviewWindow(QWidget):
         box.setContentsMargins(18, 14, 18, 14)
         box.setSpacing(6)
 
-        box.addWidget(self._section_title("품질 점수"))
+        box.addWidget(self._section_title("추천 기준 비교"))
         self._score_title = QLabel()
         self._score_title.setObjectName("scoreFile")
         box.addWidget(self._score_title)
-
-        total_row = QHBoxLayout()
-        self._total_label = QLabel()
-        self._total_label.setObjectName("scoreTotal")
-        total_row.addWidget(self._total_label)
-        caption = QLabel("종합")
-        caption.setObjectName("hint-label")
-        total_row.addWidget(caption, 0, Qt.AlignmentFlag.AlignBottom)
-        total_row.addStretch()
-        box.addLayout(total_row)
+        hint = QLabel("막대는 그룹에서 가장 좋은 사진을 100으로 본 비율입니다.")
+        hint.setObjectName("hint-label")
+        hint.setWordWrap(True)
+        box.addWidget(hint)
         box.addSpacing(8)
 
         self._bars: list[QProgressBar] = []
+        self._bar_names: list[QLabel] = []
         self._bar_values: list[QLabel] = []
-        for name in ("선명도", "노출", "색감"):
+        for name in ("주제 선명도", "주제 노출", "색감"):
             row = QHBoxLayout()
-            row.addWidget(QLabel(name))
+            name_label = QLabel(name)
+            row.addWidget(name_label)
             row.addStretch()
             value = QLabel()
             row.addWidget(value)
@@ -560,12 +554,13 @@ class GroupReviewWindow(QWidget):
             box.addWidget(bar)
             box.addSpacing(6)
             self._bars.append(bar)
+            self._bar_names.append(name_label)
             self._bar_values.append(value)
 
-        self._weights_label = QLabel()
-        self._weights_label.setObjectName("hint-label")
-        self._weights_label.setWordWrap(True)
-        box.addWidget(self._weights_label)
+        self._sens_label = QLabel()
+        self._sens_label.setObjectName("hint-label")
+        self._sens_label.setWordWrap(True)
+        box.addWidget(self._sens_label)
         box.addStretch()
         return panel
 
@@ -578,7 +573,7 @@ class GroupReviewWindow(QWidget):
     # ---------------------------------------------------------------- reload
 
     def refresh(self) -> None:
-        """Called by the main window after it changed the session (weights, adoption)."""
+        """Called by the main window after it changed the session (sensitivity, adoption)."""
         self._reload()
 
     def _reload(self) -> None:
@@ -632,8 +627,6 @@ class GroupReviewWindow(QWidget):
 
     def _fill_strip(self, keep: PhotoItem | None = None) -> None:
         strip = self._strip
-        strip.show_score = self._settings.show_score
-        strip.weights = self._settings.weights()
         prev = keep or strip.current_photo()
         strip.blockSignals(True)
         strip.clear()
@@ -695,27 +688,45 @@ class GroupReviewWindow(QWidget):
         star = " · 추천" if photo.is_recommended else ""
         self._score_title.setText(photo.source_path.name)
         if photo.scores is not None:
-            values = (photo.scores.sharpness, photo.scores.exposure, photo.scores.color)
-            for bar, label, v in zip(self._bars, self._bar_values, values, strict=True):
-                bar.setValue(round(v))
-                label.setText(str(round(v)))
-            w = self._settings.weights()
-            self._total_label.setText(str(round(composite(photo.scores, w))))
-            self._weights_label.setText(
-                f"가중치: 선명도 {w[0]:.0%}, 노출 {w[1]:.0%}, 색감 {w[2]:.0%}"
-            )
+            self._show_criteria(photo)
         else:
-            for bar, label in zip(self._bars, self._bar_values, strict=True):
+            for name, bar, label in zip(self._bar_names, self._bars, self._bar_values,
+                                        strict=True):
                 bar.setValue(0)
                 label.setText("-")
-            self._total_label.setText("-")
-            self._weights_label.setText("분석하지 못한 사진입니다")
+                self._mark(name, bar, deciding=False, tied=False)
+            self._sens_label.setText("분석하지 못한 사진입니다")
         rec = next((p for p in self._session.group(photo.group_id).photos if p.is_recommended),
                    None)
         reason = f"[{state}{star}] {photo.reason or '-'}"
         if rec is not None and rec is not photo:
             reason += f"   · 추천: {rec.source_path.name} ({rec.reason})"
         self._reason_label.setText(reason)
+
+    def _show_criteria(self, photo: PhotoItem) -> None:
+        """Fill the detail panel from the chain: bars are relative to the group's best photo."""
+        scored = [p for p in self._session.group(photo.group_id).photos if p.scores is not None]
+        table = [p.scores for p in scored]
+        scale = self._session.sensitivity
+        rec = recommend(table, scale)
+        k = next(i for i, p in enumerate(scored) if p is photo)
+        rows = criterion_rows(table, k, rec, scale)
+        for row, name, bar, label in zip(rows, self._bar_names, self._bars, self._bar_values,
+                                         strict=True):
+            bar.setValue(round(row.relative * 100))
+            label.setText(str(round(row.value)))
+            name.setText(f"{row.label} ≈" if row.tied else row.label)
+            self._mark(name, bar, row.deciding, row.tied)
+        self._sens_label.setText(f"민감도: {sensitivity_label(scale)}")
+
+    @staticmethod
+    def _mark(name: QLabel, bar: QProgressBar, deciding: bool, tied: bool) -> None:
+        """Dynamic QSS properties: the deciding criterion is emphasised, tied ones are dimmed."""
+        for widget in (name, bar):
+            widget.setProperty("deciding", deciding)
+            widget.setProperty("tied", tied)
+            widget.style().unpolish(widget)
+            widget.style().polish(widget)
 
     def _update_side_widgets(self) -> None:
         ids = [g.id for g in self._session.groups()]
