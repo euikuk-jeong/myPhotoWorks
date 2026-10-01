@@ -76,7 +76,6 @@ def test_recommendation_refreshed_after_move_adoption_kept():
 def test_rescore_with_a_new_sensitivity_changes_only_untouched_groups_adoption():
     """Same contract as the old weight change: edited groups keep the user's choice."""
     from myphotoworks.core.ranking import SHARPNESS_DEADBAND
-
     from myphotoworks.models.group_session import GroupSession
 
     soft = 100.0 * (1 - 0.8 * SHARPNESS_DEADBAND)     # inside the deadband at 1.0, outside at 0.5
@@ -94,7 +93,6 @@ def test_rescore_with_a_new_sensitivity_changes_only_untouched_groups_adoption()
 
 def test_rescore_refreshes_the_reason_text():
     from myphotoworks.core.ranking import SHARPNESS_DEADBAND
-
     from myphotoworks.models.group_session import GroupSession
 
     a = photo("a", 100.0, 70.0, 60.0)

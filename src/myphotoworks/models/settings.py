@@ -52,3 +52,4 @@ class AppSettings:
     use_exif_hints: bool = True          # focal length / lens / aperture consistency
     recommend_sensitivity: float = 1.0   # deadband multiplier: 1.5 low / 1.0 normal / 0.6 high
     show_reason: bool = True
+    selection_log: bool = True           # save recommended vs adopted when a review window closes

@@ -240,6 +240,16 @@ class GroupTab(QWidget):
         self._reason_cb.toggled.connect(self._on_display)
         box.addWidget(self._reason_cb)
 
+        self._log_cb = QCheckBox("선택 기록 저장")
+        self._log_cb.setToolTip(
+            "그룹 리뷰를 닫을 때 추천과 내가 채택한 결과를 이 컴퓨터에만 기록합니다.\n"
+            "(사용자 폴더의 .myphotoworks/selection_logs) 사진은 저장하지 않고\n"
+            "사진 폴더 경로·파일 이름·선택 결과만 남겨요.\n"
+            "추천 방식을 개선할 때 참고하는 용도입니다."
+        )
+        self._log_cb.toggled.connect(self._on_log)
+        box.addWidget(self._log_cb)
+
         self._adv_btn = QToolButton()
         self._adv_btn.setText("추천 민감도 (고급)")
         self._adv_btn.setCheckable(True)
@@ -282,13 +292,14 @@ class GroupTab(QWidget):
         self._global_cb.setChecked(s.global_clustering)
         self._exif_cb.setChecked(s.use_exif_hints)
         self._reason_cb.setChecked(s.show_reason)
+        self._log_cb.setChecked(s.selection_log)
         self._block(False)
         self._update_labels()
         self._apply_enabled()
 
     def _block(self, on: bool) -> None:
         for w in (self._mode_combo, self._sim_slider, self._gap_spin, self._reason_cb,
-                  self._global_cb, self._exif_cb, self._sens_combo):
+                  self._log_cb, self._global_cb, self._exif_cb, self._sens_combo):
             w.blockSignals(on)
 
     def _update_labels(self) -> None:
@@ -340,6 +351,10 @@ class GroupTab(QWidget):
         self._settings.show_reason = self._reason_cb.isChecked()
         self.changed.emit()
         self.display_changed.emit()
+
+    def _on_log(self, _checked: bool) -> None:
+        self._settings.selection_log = self._log_cb.isChecked()
+        self.changed.emit()
 
     def _on_adv_toggled(self, checked: bool) -> None:
         self._adv_btn.setArrowType(

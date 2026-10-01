@@ -29,7 +29,7 @@ class TestSaveSettings:
             "output_prefix", "output_suffix", "output_quality",
             "grouping_mode", "similarity_slider", "time_gap",
             "global_clustering", "use_exif_hints",
-            "recommend_sensitivity", "show_reason", "grouping_ui_version",
+            "recommend_sensitivity", "show_reason", "selection_log", "grouping_ui_version",
         }
         assert expected_keys == set(data.keys())
 

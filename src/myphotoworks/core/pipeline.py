@@ -1,17 +1,26 @@
 """Per-photo analysis: one small decode yields signature, scores and capture time."""
 from __future__ import annotations
 
-from collections.abc import Callable
+import logging
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
+import numpy as np
 from PIL import Image
 
-from myphotoworks.core.analysis_image import DEFAULT_LONG_SIDE, load_analysis_image
+from myphotoworks.core.analysis_image import (
+    DEFAULT_LONG_SIDE,
+    load_analysis_image,
+    load_face_crops,
+)
+from myphotoworks.core.faces import Box, FaceEngine, select_main_faces
 from myphotoworks.core.grouping import ExifHints
 from myphotoworks.core.scoring import QualityScores, score_images
 from myphotoworks.core.similarity import Signature, compute_signature
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -22,18 +31,51 @@ class Analysis:
     hints: ExifHints | None = None
 
 
+def analyze_faces(
+    path: Path, raw: Image.Image, engine: FaceEngine | None
+) -> list[tuple[Box, Mapping[str, float] | None]]:
+    """Main faces of a photo as ``(box in the pixels of raw, blendshapes or None)``.
+
+    Two stages: the detector looks at the small analysis copy; only photos with a main face
+    cost a second decode of that face from the original for the landmarker. Any engine failure
+    means "no faces" for this photo (logged) - the analysis itself never fails because of faces.
+    """
+    if engine is None:
+        return []
+    try:
+        w, h = raw.size
+        boxes = []
+        for x0, y0, x1, y1 in engine.detect(np.asarray(raw)):
+            box = (max(0, x0), max(0, y0), min(w, x1), min(h, y1))
+            if box[2] > box[0] and box[3] > box[1]:
+                boxes.append(box)
+        main = select_main_faces(boxes, raw.size)
+        crops = load_face_crops(path, main, raw.size)       # one decode for all faces
+        return [(box, engine.blendshapes(np.asarray(crop)))
+                for box, crop in zip(main, crops, strict=True)]
+    except Exception as e:
+        logger.warning("face analysis failed for %s: %s", path, e)
+        return []
+
+
 def analyze_photo(
     path: Path,
     taken: datetime | None,
     hints: ExifHints | None = None,
     correct: Callable[[Image.Image], Image.Image] | None = None,
     long_side: int = DEFAULT_LONG_SIDE,
+    face_engine: FaceEngine | None = None,
 ) -> Analysis:
     """Decode a small copy once; derive signature and quality scores.
 
     ``correct`` applies the user's correction settings so exposure / colour reflect the
-    final result. Sharpness and the signature always use the uncorrected copy.
+    final result. Sharpness and the signature always use the uncorrected copy. ``face_engine``
+    (optional) finds the main faces: they become the subject and fill ``scores.faces``. Without
+    faces, ``hints.af_point`` (the camera's AF point) is the subject when it is known.
     """
     raw = load_analysis_image(path, long_side)
     corrected = correct(raw.copy()) if correct is not None else raw
-    return Analysis(compute_signature(raw), score_images(raw, corrected), taken, hints)
+    faces = analyze_faces(path, raw, face_engine)
+    af_point = hints.af_point if hints is not None else None
+    scores = score_images(raw, corrected, faces, af_point)
+    return Analysis(compute_signature(raw), scores, taken, hints)

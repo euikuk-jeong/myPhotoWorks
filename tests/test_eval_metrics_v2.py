@@ -35,7 +35,6 @@ def test_v2_is_registered_next_to_baseline():
 
 def test_v2_rank_is_a_best_first_permutation_whose_head_is_the_recommendation():
     from myphotoworks.core.ranking import recommend
-
     from myphotoworks.dev.eval_metrics import v2_rank
 
     rng = np.random.default_rng(0)

@@ -55,6 +55,7 @@ def save_settings(cfg: dict, settings: AppSettings) -> None:
         "use_exif_hints": settings.use_exif_hints,
         "recommend_sensitivity": settings.recommend_sensitivity,
         "show_reason": settings.show_reason,
+        "selection_log": settings.selection_log,
         "grouping_ui_version": _GROUPING_UI_VERSION,
     }
 
@@ -119,6 +120,7 @@ def load_settings(cfg: dict) -> AppSettings:
             ),
             recommend_sensitivity=_sensitivity(data.get("recommend_sensitivity")),
             show_reason=bool(data.get("show_reason", True)),
+            selection_log=bool(data.get("selection_log", True)),
         )
     except Exception:
         return AppSettings()

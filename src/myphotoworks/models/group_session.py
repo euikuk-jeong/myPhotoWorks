@@ -5,7 +5,13 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-from myphotoworks.core.ranking import reason_label, recommend
+from myphotoworks.core.ranking import (
+    face_badges,
+    is_person_group,
+    reason_label,
+    recommend,
+    tilt_badges,
+)
 from myphotoworks.core.scoring import ALGORITHM_VERSION, is_blurry
 from myphotoworks.models.photo_item import PhotoItem
 
@@ -316,9 +322,14 @@ class GroupSession:
             return
         table = [p.scores for p in scored]
         rec = recommend(table, self._sensitivity)
+        person = len(table) > 1 and is_person_group(table)
         for k, p in enumerate(scored):
             p.is_recommended = k == rec.index
             parts = [reason_label(rec, len(table))] if k == rec.index else []
+            if person:
+                parts += face_badges(table[k])
+            if len(table) > 1:
+                parts += tilt_badges(table[k])
             if is_blurry(table[k], table):
                 parts.append("흐림")
             p.reason = " · ".join(parts)

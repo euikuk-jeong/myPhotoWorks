@@ -1,7 +1,7 @@
 """Subject region detection on a small grayscale analysis copy (pure NumPy, no Qt).
 
-Stage-1 chain: sharpest area -> centre. Later stages insert more sources (faces, AF point)
-in front of it, so callers only depend on ``SubjectRegion`` and its ``source`` label.
+Chain: main faces (stage 2) -> camera AF point (stage 3) -> sharpest area -> centre. Callers only
+depend on ``SubjectRegion`` and its ``source`` label.
 """
 from __future__ import annotations
 
@@ -13,6 +13,7 @@ GRID = 16                  # the image is cut into GRID x GRID cells to find the
 GROW_RATIO = 0.5           # neighbouring cells join when their edge energy >= this share of the max
 MIN_CONFIDENCE = 0.5       # below this the scene is evenly sharp (or flat): fall back to the centre
 CENTER_FRACTION = 0.6      # the centre fallback covers this share of each side
+AF_REGION_FRACTION = 0.18  # the AF subject is a square of this share of the shorter side
 
 
 @dataclass(frozen=True)
@@ -20,7 +21,7 @@ class SubjectRegion:
     """Where the subject is. ``bbox`` = (x0, y0, x1, y1) in pixels, x1/y1 exclusive."""
 
     bbox: tuple[int, int, int, int]
-    source: str            # "sharpest" | "center"
+    source: str            # "face" | "af" | "sharpest" | "center"
     confidence: float      # 0..1
 
 
@@ -44,15 +45,50 @@ def _center_box(h: int, w: int) -> tuple[int, int, int, int]:
     return mx, my, max(mx + 1, w - mx), max(my + 1, h - my)
 
 
-def detect_subject(gray: np.ndarray) -> SubjectRegion:
-    """Find the sharpest area of ``gray`` (2-D float array, 0..255).
+def _face_region(h: int, w: int, face_boxes) -> SubjectRegion | None:
+    """Union of the face boxes clipped to the image, or ``None`` when no box is inside it."""
+    clipped = [(max(0, x0), max(0, y0), min(w, x1), min(h, y1)) for x0, y0, x1, y1 in face_boxes]
+    clipped = [b for b in clipped if b[2] > b[0] and b[3] > b[1]]
+    if not clipped:
+        return None
+    bbox = (min(b[0] for b in clipped), min(b[1] for b in clipped),
+            max(b[2] for b in clipped), max(b[3] for b in clipped))
+    return SubjectRegion(bbox, "face", 1.0)
 
-    Cells are ranked by mean gradient magnitude; cells connected to the strongest one with at
-    least ``GROW_RATIO`` of its energy form the subject. Confidence is how far the strongest
+
+def _af_region(h: int, w: int, af_point) -> SubjectRegion | None:
+    """Square of ``AF_REGION_FRACTION`` of the shorter side around the AF point (shares of the
+    frame), clipped to the image; ``None`` when the point is not inside the frame."""
+    fx, fy = af_point
+    if not (0.0 <= fx <= 1.0 and 0.0 <= fy <= 1.0):
+        return None
+    half = AF_REGION_FRACTION * min(h, w) / 2
+    cx, cy = fx * w, fy * h
+    x0, y0 = max(0, int(round(cx - half))), max(0, int(round(cy - half)))
+    x1, y1 = min(w, int(round(cx + half))), min(h, int(round(cy + half)))
+    x1, y1 = max(x1, min(w, x0 + 1)), max(y1, min(h, y0 + 1))
+    return SubjectRegion((x0, y0, x1, y1), "af", 1.0)
+
+
+def detect_subject(gray: np.ndarray, face_boxes=None, af_point=None) -> SubjectRegion:
+    """Find the subject of ``gray`` (2-D float array, 0..255).
+
+    Main-face boxes (``face_boxes``, pixels of ``gray``) win: the subject is their union. Next
+    comes the camera's AF point (``af_point``, shares of the frame). Otherwise it is the sharpest
+    area: cells are ranked by mean gradient magnitude; cells connected to the strongest one with
+    at least ``GROW_RATIO`` of its energy form the subject. Confidence is how far the strongest
     cell stands out from the typical one (1 - median / max), so a pan-focus scene where
     everything is equally sharp scores low and falls back to the centre.
     """
     h, w = gray.shape
+    if face_boxes:
+        region = _face_region(h, w, face_boxes)
+        if region is not None:
+            return region
+    if af_point is not None:
+        region = _af_region(h, w, af_point)
+        if region is not None:
+            return region
     small = downsample2(gray)
     sh, sw = small.shape
     if sh < 2 or sw < 2:

@@ -11,6 +11,7 @@ import logging
 from collections import defaultdict
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
+from functools import partial
 from pathlib import Path
 
 from myphotoworks.core.ranking import recommend as v2_recommend
@@ -116,9 +117,13 @@ def evaluate(
     algo: str = "baseline",
     score_fn: ScoreFn | None = None,
     root_override: Path | None = None,
+    face_engine=None,
 ) -> Report:
+    """Hit rates of ``algo`` against the labels. ``face_engine`` (e.g.
+    ``core.faces.get_face_engine()``) lets the default scoring see faces; without it the replay
+    measures the no-face chain only."""
     ranker = RANKERS[algo]
-    score_fn = score_fn or score_file
+    score_fn = score_fn or partial(score_file, face_engine=face_engine)
     report = Report()
     for label in labels:
         root = Path(root_override if root_override is not None else label["root"])
@@ -209,14 +214,17 @@ def load_label(path: Path) -> dict:
     return json.loads(Path(path).read_text(encoding="utf-8"))
 
 
-def score_file(path: Path) -> QualityScores:
+def score_file(path: Path, face_engine=None) -> QualityScores:
     """Scores exactly as the grouping run computes them, without correction settings, plus the
-    legacy whole-frame values the ``baseline`` ranker needs."""
+    legacy whole-frame values the ``baseline`` ranker needs. ``face_engine`` (e.g.
+    ``core.faces.get_face_engine()``) adds the faces; ``None`` means no faces."""
     from dataclasses import replace
 
     from myphotoworks.core.analysis_image import load_analysis_image
+    from myphotoworks.core.pipeline import analyze_faces
     from myphotoworks.core.scoring import exposure_score, score_images, sharpness_score
+    from myphotoworks.utils.exif_reader import read_af_point
 
     raw = load_analysis_image(path)
-    return replace(score_images(raw, raw),
-                   sharpness=sharpness_score(raw), exposure=exposure_score(raw))
+    scores = score_images(raw, raw, analyze_faces(path, raw, face_engine), read_af_point(path))
+    return replace(scores, sharpness=sharpness_score(raw), exposure=exposure_score(raw))

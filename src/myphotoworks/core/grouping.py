@@ -45,6 +45,7 @@ class ExifHints:
     focal: float | None = None     # mm, 0 / missing -> None
     lens: str | None = None
     aperture: float | None = None  # f-number
+    af_point: tuple[float, float] | None = None  # camera AF point, shares of the upright frame
 
 
 @dataclass(frozen=True)
