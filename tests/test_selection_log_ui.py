@@ -68,13 +68,34 @@ def test_nothing_is_saved_when_the_setting_is_off(qtbot, tmp_path):
     assert _logs(log_dir) == []
 
 
-def test_a_window_saves_only_once(qtbot, tmp_path):
+def test_closing_again_updates_the_same_log_instead_of_stacking_copies(qtbot, tmp_path):
+    """Stage-3 refinement: every close saves (a failed write is retried at the next close), and
+    the one file per session holds the latest state."""
     log_dir = tmp_path / "logs"
-    win, _, _ = _review(qtbot, tmp_path, log_dir)
+    win, session, photos = _review(qtbot, tmp_path, log_dir)
     win.close()
+    (first,) = _logs(log_dir)
+    session.set_adopted(photos[0], True)
     win.show()
     win.close()
-    assert len(_logs(log_dir)) == 1
+    (second,) = _logs(log_dir)
+    assert first == second
+    assert json.loads(second.read_text(encoding="utf-8"))["groups"][0]["picked"] == [
+        "s_0.jpg", "s_1.jpg"]
+
+
+def test_a_second_review_window_of_the_same_session_updates_the_same_log(qtbot, tmp_path):
+    from myphotoworks.ui.group_review_window import GroupReviewWindow
+
+    log_dir = tmp_path / "logs"
+    win, session, photos = _review(qtbot, tmp_path, log_dir)
+    win.close()
+    session.set_adopted(photos[1], False)
+    again = GroupReviewWindow(session, AppSettings(), log_dir=log_dir)
+    qtbot.addWidget(again)
+    again.close()
+    (only,) = _logs(log_dir)
+    assert json.loads(only.read_text(encoding="utf-8"))["groups"][0]["picked"] == []
 
 
 def test_an_unwritable_log_folder_does_not_break_closing(qtbot, tmp_path):

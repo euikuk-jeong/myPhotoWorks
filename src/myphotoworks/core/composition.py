@@ -26,6 +26,7 @@ TILT_BLUR_SIGMA = 1.5          # smooths pixel staircases of slanted lines befor
 TILT_EDGE_SHARE = 0.20         # the strongest 20 % of the pixels vote
 TILT_MIN_EDGE = 15.0           # ... but only edges at least this strong (grey levels / px)
 TILT_MIN_COHERENCE = 0.5       # below this the lines do not agree: no dominant direction
+TILT_SEARCH_DEG = 15.0         # only lines this close to an axis vote; beyond that: a diagonal
 _MIN_SIDE = 16
 
 
@@ -55,8 +56,12 @@ def estimate_tilt(gray: np.ndarray) -> float | None:
 
     Strong edges vote with their gradient direction folded to 90 degrees (a leaning building and
     a tilted horizon count alike); the votes are added as unit vectors of four times the angle,
-    weighted by edge strength squared, so slanted-line staircase artefacts average out. The
-    result is trusted only when the votes agree (``TILT_MIN_COHERENCE``).
+    weighted by edge strength squared, so slanted-line staircase artefacts average out. Only
+    lines within ``TILT_SEARCH_DEG`` of an axis vote: a staircase or roof edge at 20-45 degrees
+    is a deliberate diagonal, not a tilt. Those lines still count in the strength the votes are
+    measured against, so a scene dominated by diagonals - or with level and diagonal lines in
+    equal measure - has no clear tilt. The result is trusted only when the votes agree
+    (``TILT_MIN_COHERENCE``).
     """
     if min(gray.shape) < _MIN_SIDE:
         return None
@@ -69,7 +74,10 @@ def estimate_tilt(gray: np.ndarray) -> float | None:
         return None
     phi = np.arctan2(gy[selected], gx[selected])
     weight = mag[selected] ** 2
-    vote = np.sum(weight * np.exp(4j * phi))
+    off_axis = np.degrees(phi) + 45.0                      # degrees from the nearest axis ...
+    off_axis = off_axis % 90.0 - 45.0                      # ... folded into -45..45
+    near = np.abs(off_axis) <= TILT_SEARCH_DEG
+    vote = np.sum(weight[near] * np.exp(4j * phi[near]))
     if abs(vote) / weight.sum() < TILT_MIN_COHERENCE:
         return None
     return float(-np.degrees(np.angle(vote)) / 4.0)

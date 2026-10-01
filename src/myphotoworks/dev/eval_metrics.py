@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from collections import defaultdict
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
@@ -112,6 +113,27 @@ class Report:
     warnings: list[str] = field(default_factory=list)
 
 
+def _newest_per_session(labels: Iterable[dict]) -> list[dict]:
+    """Labels sharing a non-empty ``session`` are versions of one review: keep the newest by
+    ``logged_at`` (a tie: the later one in the list). Labels without a session stay as they are."""
+    labels = list(labels)
+    newest: dict[str, tuple[tuple[str, int], int]] = {}
+    for i, label in enumerate(labels):
+        session = label.get("session")
+        if session:
+            key = (str(label.get("logged_at", "")), i)
+            if session not in newest or key >= newest[session][0]:
+                newest[session] = (key, i)
+    keep = {i for _key, i in newest.values()}
+    return [label for i, label in enumerate(labels) if not label.get("session") or i in keep]
+
+
+def _made_with_faces(algorithm: str | None) -> bool:
+    """True for ``v2-stage2`` and later: those recommendations used the face analysis."""
+    match = re.match(r"v2-stage(\d+)", algorithm or "")
+    return bool(match) and int(match.group(1)) >= 2
+
+
 def evaluate(
     labels: Iterable[dict],
     algo: str = "baseline",
@@ -121,11 +143,13 @@ def evaluate(
 ) -> Report:
     """Hit rates of ``algo`` against the labels. ``face_engine`` (e.g.
     ``core.faces.get_face_engine()``) lets the default scoring see faces; without it the replay
-    measures the no-face chain only."""
+    measures the no-face chain only (labels made with face analysis then get a warning). Labels
+    of one ``session`` (reopened reviews) count once, with their newest version."""
     ranker = RANKERS[algo]
+    faces_unseen = score_fn is None and face_engine is None
     score_fn = score_fn or partial(score_file, face_engine=face_engine)
     report = Report()
-    for label in labels:
+    for label in _newest_per_session(labels):
         root = Path(root_override if root_override is not None else label["root"])
         weights = tuple(label.get("weights", DEFAULT_WEIGHTS))
         sensitivity = float(label.get("sensitivity", 1.0))
@@ -133,6 +157,12 @@ def evaluate(
         if made_with is not None and made_with != ALGORITHM_VERSION:
             report.warnings.append(
                 f"label made with algorithm '{made_with}', current is '{ALGORITHM_VERSION}'"
+            )
+        if faces_unseen and _made_with_faces(made_with):
+            faces_unseen = False                     # say it once
+            report.warnings.append(
+                "labels were made with face analysis but faces are not analysed here: the person "
+                "chain is not measured (pass face_engine, e.g. eval_recommend.py --faces)"
             )
         for g in label["groups"]:
             if not g.get("reviewed", True):

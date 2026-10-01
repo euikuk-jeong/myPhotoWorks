@@ -381,7 +381,6 @@ class GroupReviewWindow(QWidget):
         self._session = session
         self._settings = settings
         self._log_dir = log_dir          # selection log folder (None: the default one)
-        self._log_saved = False
         self._gid: int | None = None
         self._icons: dict[str, QIcon] = {}
         self._big: dict[str, QPixmap] = {}
@@ -395,9 +394,9 @@ class GroupReviewWindow(QWidget):
             self._select_group(groups[0].id)
 
     def closeEvent(self, event) -> None:  # noqa: N802
-        """Keep a record of this review (recommended vs adopted), once per window."""
-        if self._settings.selection_log and not self._log_saved:
-            self._log_saved = True
+        """Keep a record of this review (recommended vs adopted). Every close saves: the session's
+        one log file is updated, and a write that failed is simply tried again next time."""
+        if self._settings.selection_log:
             save_selection_log(self._session, self._log_dir)
         super().closeEvent(event)
 

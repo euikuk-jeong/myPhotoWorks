@@ -127,13 +127,16 @@ class FakeFaceEngine:
     entry simulates "landmarker found no face in the crop". Everything it was asked is recorded.
     """
 
-    def __init__(self, boxes=(), shapes=(), fail_detect: bool = False, fail_blend: bool = False):
+    def __init__(self, boxes=(), shapes=(), fail_detect: bool = False, fail_blend=False):
         self.boxes = [tuple(b) for b in boxes]
         self.shapes = list(shapes)
+        # ``fail_blend``: True = every blendshapes() call raises; a collection of 0-based call
+        # numbers = only those calls raise
         self.fail_detect, self.fail_blend = fail_detect, fail_blend
         self.detect_shapes: list[tuple] = []      # (h, w, channels) of each detect() input
         self.detect_dtypes: list[str] = []
         self.crop_sizes: list[tuple[int, int]] = []   # (w, h) of each blendshapes() input
+        self.face_boxes: list = []                # the ``face_box`` of each blendshapes() call
 
     def detect(self, rgb):
         self.detect_shapes.append(tuple(rgb.shape))
@@ -142,11 +145,13 @@ class FakeFaceEngine:
             raise RuntimeError("detector exploded")
         return list(self.boxes)
 
-    def blendshapes(self, rgb):
+    def blendshapes(self, rgb, face_box=None):
         self.crop_sizes.append((rgb.shape[1], rgb.shape[0]))
-        if self.fail_blend:
-            raise RuntimeError("landmarker exploded")
+        self.face_boxes.append(face_box)
         k = len(self.crop_sizes) - 1
+        fail = self.fail_blend
+        if fail is True or (fail and not isinstance(fail, bool) and k in fail):
+            raise RuntimeError("landmarker exploded")
         return self.shapes[k] if k < len(self.shapes) else blend()
 
 

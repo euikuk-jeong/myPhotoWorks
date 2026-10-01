@@ -75,7 +75,7 @@ def test_only_label_fields_are_logged(tmp_path):
     session.mark_reviewed(0)
     saved = json.loads(_save(session, tmp_path).read_text(encoding="utf-8"))
     assert set(saved) == {"schema", "source", "algorithm", "sensitivity", "root", "groups",
-                          "logged_at"}
+                          "logged_at", "session"}
     for group in saved["groups"]:
         assert set(group) == {"id", "files", "picked", "recommended", "reviewed", "edited"}
         assert all("/" not in name for name in group["files"])      # relative to the root only
@@ -137,27 +137,79 @@ def test_the_folder_is_created_on_demand(tmp_path):
     assert _save(session, target).parent == target
 
 
-def test_every_save_is_a_new_file_even_within_the_same_second(tmp_path):
+def test_a_session_has_a_stable_unique_id():
+    """Stage-3 refinement: ``GroupSession.session_id``, one per grouping run."""
+    first, _ = make()
+    second, _ = make()
+    assert isinstance(first.session_id, str) and len(first.session_id) >= 8
+    assert first.session_id == first.session_id != second.session_id
+
+
+def test_editing_a_session_keeps_its_id():
+    session, ps = make()
+    before = session.session_id
+    session.move_photo(ps[0], session.groups()[1].id)
+    session.merge(session.groups()[0].id, session.groups()[-1].id)
+    assert session.session_id == before
+
+
+def test_the_log_records_the_session_id(tmp_path):
     session, _ = make()
     session.mark_reviewed(0)
-    first, second = _save(session, tmp_path), _save(session, tmp_path)
-    assert first != second and len(_json_files(tmp_path)) == 2
+    saved = json.loads(_save(session, tmp_path).read_text(encoding="utf-8"))
+    assert saved["session"] == session.session_id
+
+
+def test_saving_the_same_session_again_updates_its_one_file(tmp_path):
+    """Stage-3 refinement: reopening and closing a review must not stack copies of the same
+    decisions (the evaluation would count them twice)."""
+    session, ps = make()
+    session.mark_reviewed(0)
+    first = _save(session, tmp_path, now=datetime(2026, 10, 2, 9, 0, 0))
+    session.mark_reviewed(1)
+    session.set_adopted(ps[2], True)
+    second = _save(session, tmp_path, now=datetime(2026, 10, 2, 9, 5, 0))
+    assert first == second and _json_files(tmp_path) == [first]
+    saved = json.loads(first.read_text(encoding="utf-8"))
+    assert saved["logged_at"].startswith("2026-10-02T09:05:00")
+    assert sum(g["reviewed"] for g in saved["groups"]) == 2             # the later state wins
+
+
+def test_different_sessions_get_different_files_even_in_the_same_second(tmp_path):
+    one, _ = make()
+    other, _ = make()
+    one.mark_reviewed(0)
+    other.mark_reviewed(0)
+    assert _save(one, tmp_path) != _save(other, tmp_path)
+    assert len(_json_files(tmp_path)) == 2
 
 
 def test_logs_load_oldest_first_and_foreign_files_are_skipped(tmp_path):
     from myphotoworks.utils.selection_log import load_selection_logs
 
-    session, _ = make()
-    session.mark_reviewed(0)
-    _save(session, tmp_path, now=datetime(2026, 10, 2, 9, 0, 0))
-    session.mark_reviewed(1)
-    _save(session, tmp_path, now=datetime(2026, 10, 3, 9, 0, 0))
+    early, _ = make()
+    early.mark_reviewed(0)
+    late, _ = make()
+    late.mark_reviewed(0)
+    late.mark_reviewed(1)
+    _save(late, tmp_path, now=datetime(2026, 10, 3, 9, 0, 0))
+    _save(early, tmp_path, now=datetime(2026, 10, 2, 9, 0, 0))
     (tmp_path / "notes.json").write_text('{"hello": 1}', encoding="utf-8")
     (tmp_path / "broken.json").write_text("{not json", encoding="utf-8")
     (tmp_path / "readme.txt").write_text("hi", encoding="utf-8")
     logs = load_selection_logs(tmp_path)
     assert [entry["logged_at"][:10] for entry in logs] == ["2026-10-02", "2026-10-03"]
     assert [sum(g["reviewed"] for g in entry["groups"]) for entry in logs] == [1, 2]
+
+
+def test_logs_written_before_the_session_id_still_load(tmp_path):
+    from myphotoworks.utils.selection_log import load_selection_logs
+
+    old = {"schema": 1, "source": "user", "algorithm": "v2-stage3", "sensitivity": 1.0,
+           "root": "/photos/day1", "groups": [], "logged_at": "2026-10-01T10:00:00"}
+    (tmp_path / "20261001-100000.json").write_text(json.dumps(old), encoding="utf-8")
+    assert [entry["logged_at"] for entry in load_selection_logs(tmp_path)] == [
+        "2026-10-01T10:00:00"]
 
 
 def test_loading_a_missing_folder_gives_an_empty_list(tmp_path):
@@ -198,3 +250,17 @@ def test_a_stored_off_value_stays_off(value):
     from myphotoworks.utils.config import load_settings
 
     assert load_settings({"app_settings": {"selection_log": value}}).selection_log is False
+
+
+def test_a_failed_replace_leaves_no_temporary_file_behind(tmp_path, monkeypatch):
+    import os
+
+    session, _ = make()
+    session.mark_reviewed(0)
+
+    def boom(*a, **k):
+        raise PermissionError("target is locked")
+
+    monkeypatch.setattr(os, "replace", boom)
+    assert _save(session, tmp_path) is None
+    assert list(tmp_path.iterdir()) == []                       # no .tmp, no half log

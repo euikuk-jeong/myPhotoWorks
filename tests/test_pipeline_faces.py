@@ -189,12 +189,26 @@ def test_a_failing_detector_means_no_faces_and_a_log_entry(tmp_path, caplog):
     assert caplog.records
 
 
-def test_a_failing_landmarker_means_no_faces_for_that_photo(tmp_path, caplog):
+def test_a_failing_landmarker_keeps_the_detected_face_with_neutral_values(tmp_path, caplog):
+    """Stage-3 refinement (replaces "the whole photo becomes faceless"): the detector found the
+    face, so the photo stays a portrait; only the eyes / smile are unknown (open, neutral)."""
     engine = FakeFaceEngine(boxes=[FACE], fail_blend=True)
     with caplog.at_level(logging.WARNING):
         s = _analyze(_jpeg(tmp_path, shallow_dof(seed=5)), engine).scores
-    assert s.faces is None and s.subject_source == "sharpest"
-    assert caplog.records
+    f = s.faces
+    assert f is not None and (f.count, f.closed_eyes, f.smile) == (1, 0, 0.0)
+    assert s.subject_source == "face" and caplog.records
+
+
+def test_one_failing_face_does_not_drop_the_others(tmp_path):
+    from myphotoworks.core.faces import EYE_CLOSED_TH
+
+    left, right = (60, 60, 160, 160), (300, 60, 400, 160)
+    shut = blend(blink_l=EYE_CLOSED_TH + 0.3)
+    engine = FakeFaceEngine(boxes=[left, right], shapes=[blend(), shut], fail_blend={0})
+    f = _analyze(_jpeg(tmp_path, shallow_dof(seed=5)), engine).scores.faces
+    assert f.count == 2 and f.closed_eyes == 1             # the first failed, the second counts
+    assert f.boxes == (left, right)
 
 
 # ---- group runner ----------------------------------------------------------------------------
@@ -308,3 +322,11 @@ def test_rescoring_a_person_session_never_decodes_or_detects(photos, monkeypatch
     session.rescore(1.5)
     assert session.group_count() == 4
     assert (len(engine.detect_shapes), len(engine.crop_sizes)) == calls
+
+
+def test_a_landmarker_that_fails_every_time_logs_once_per_photo_not_once_per_face(tmp_path, caplog):
+    left, right = (60, 60, 160, 160), (300, 60, 400, 160)
+    engine = FakeFaceEngine(boxes=[left, right], fail_blend=True)
+    with caplog.at_level(logging.WARNING):
+        _analyze(_jpeg(tmp_path, shallow_dof(seed=5)), engine)
+    assert len([r for r in caplog.records if r.levelno >= logging.WARNING]) == 1

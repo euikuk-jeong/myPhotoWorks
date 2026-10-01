@@ -12,8 +12,8 @@ from PIL import Image
 
 from myphotoworks.core.analysis_image import (
     DEFAULT_LONG_SIDE,
+    face_crops,
     load_analysis_image,
-    load_face_crops,
 )
 from myphotoworks.core.faces import Box, FaceEngine, select_main_faces
 from myphotoworks.core.grouping import ExifHints
@@ -37,8 +37,10 @@ def analyze_faces(
     """Main faces of a photo as ``(box in the pixels of raw, blendshapes or None)``.
 
     Two stages: the detector looks at the small analysis copy; only photos with a main face
-    cost a second decode of that face from the original for the landmarker. Any engine failure
-    means "no faces" for this photo (logged) - the analysis itself never fails because of faces.
+    cost a second decode of the faces from the original for the landmarker, which is told where
+    each face is inside its crop. A detector or decode failure means "no faces" for this photo
+    (logged); a landmarker failure only leaves that face's blendshapes unknown (``None``: eyes
+    open, neutral) - the detected face stays. The analysis itself never fails because of faces.
     """
     if engine is None:
         return []
@@ -50,12 +52,24 @@ def analyze_faces(
             if box[2] > box[0] and box[3] > box[1]:
                 boxes.append(box)
         main = select_main_faces(boxes, raw.size)
-        crops = load_face_crops(path, main, raw.size)       # one decode for all faces
-        return [(box, engine.blendshapes(np.asarray(crop)))
-                for box, crop in zip(main, crops, strict=True)]
+        crops = face_crops(path, main, raw.size)            # one decode for all faces
     except Exception as e:
         logger.warning("face analysis failed for %s: %s", path, e)
         return []
+    faces = []
+    failed = 0
+    for box, crop in zip(main, crops, strict=True):
+        try:
+            shapes = engine.blendshapes(np.asarray(crop.image), crop.face_box)
+        except Exception as e:
+            failed += 1
+            error = e
+            shapes = None
+        faces.append((box, shapes))
+    if failed:
+        logger.warning("landmarker failed for %d of %d faces of %s: %s",
+                       failed, len(faces), path, error)
+    return faces
 
 
 def analyze_photo(
