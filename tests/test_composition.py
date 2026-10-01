@@ -179,4 +179,4 @@ def test_a_correction_change_keeps_the_composition_measurements():
 def test_algorithm_version_marks_stage_three():
     from myphotoworks.core.scoring import ALGORITHM_VERSION
 
-    assert ALGORITHM_VERSION == "v2-stage3"
+    assert ALGORITHM_VERSION.startswith("v2-stage3")

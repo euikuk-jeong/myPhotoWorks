@@ -127,8 +127,12 @@ class FaceEngine(Protocol):
     def detect(self, rgb: np.ndarray) -> list[Box]:
         """Face boxes in the pixels of ``rgb``."""
 
-    def blendshapes(self, rgb: np.ndarray) -> dict[str, float] | None:
-        """Blendshape scores of the face in a face crop, ``None`` when the model sees no face."""
+    def blendshapes(
+        self, rgb: np.ndarray, face_box: Box | None = None
+    ) -> dict[str, float] | None:
+        """Blendshape scores of the face in a face crop, ``None`` when the model sees no face.
+        ``face_box`` is where the detected face is inside ``rgb`` (``None``: the crop centre);
+        with a neighbour in the crop it tells which face is meant."""
 
 
 class MediaPipeFaceEngine:
@@ -163,29 +167,41 @@ class MediaPipeFaceEngine:
                           b.origin_x + b.width, b.origin_y + b.height))
         return boxes
 
-    def blendshapes(self, rgb: np.ndarray) -> dict[str, float] | None:
+    def blendshapes(
+        self, rgb: np.ndarray, face_box: Box | None = None
+    ) -> dict[str, float] | None:
         with self._lock:
             result = self._landmarker.detect(self._image(rgb))
         if not result.face_blendshapes:
             return None
-        k = self._nearest_to_centre(result)
+        k = self._nearest_to_centre(result, self._face_target(face_box, rgb.shape))
         return {c.category_name: c.score for c in result.face_blendshapes[k]}
 
     @staticmethod
-    def _nearest_to_centre(result) -> int:
-        """Index of the face whose landmarks sit closest to the crop centre: the crop is centred
-        on the detected face, but a close neighbour can be inside its margin too."""
+    def _face_target(face_box: Box | None, shape: tuple[int, ...]) -> tuple[float, float]:
+        """Centre of ``face_box`` as shares of an image of ``shape`` (height, width, ...); the
+        image centre when the box is unknown."""
+        if face_box is None:
+            return 0.5, 0.5
+        h, w = shape[0], shape[1]
+        return (face_box[0] + face_box[2]) / 2 / w, (face_box[1] + face_box[3]) / 2 / h
+
+    @staticmethod
+    def _nearest_to_centre(result, target: tuple[float, float] = (0.5, 0.5)) -> int:
+        """Index of the landmarker face whose landmarks sit closest to ``target`` (shares of the
+        crop): the detected face, even when a neighbour inside the crop margin is nearer to the
+        crop centre."""
         n = len(result.face_blendshapes)
         marks = getattr(result, "face_landmarks", None)
         if n == 1 or not marks or len(marks) != n:
             return 0
 
-        def off_centre(i: int) -> float:
+        def off_target(i: int) -> float:
             xs = [p.x for p in marks[i]]
             ys = [p.y for p in marks[i]]
-            return (sum(xs) / len(xs) - 0.5) ** 2 + (sum(ys) / len(ys) - 0.5) ** 2
+            return (sum(xs) / len(xs) - target[0]) ** 2 + (sum(ys) / len(ys) - target[1]) ** 2
 
-        return min(range(n), key=off_centre)
+        return min(range(n), key=off_target)
 
 
 def _cpu_has_avx() -> bool:

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -42,6 +43,7 @@ class GroupSession:
     ) -> None:
         self._photos = photos
         self._sensitivity = sensitivity
+        self._session_id = uuid.uuid4().hex
         self._order: list[int] = []
         self._members: dict[int, list[PhotoItem]] = {}
         self._next_id = 0
@@ -92,6 +94,12 @@ class GroupSession:
     @property
     def can_undo(self) -> bool:
         return bool(self._undo)
+
+    @property
+    def session_id(self) -> str:
+        """Identifies this grouping run (stays the same through every edit); the selection log
+        keeps one file per session."""
+        return self._session_id
 
     @property
     def sensitivity(self) -> float:

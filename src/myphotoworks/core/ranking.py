@@ -140,6 +140,25 @@ def _smile_present(group: Sequence[QualityScores]) -> bool:
     return max((s.faces.smile for s in group if s.faces), default=0.0) >= SMILE_PRESENT_TH
 
 
+def _face_failed(s: QualityScores) -> bool:
+    """A photo with a face whose face is (nearly) black / blown out, or has no detail at all."""
+    if not s.faces:
+        return False
+    return s.faces.exposure < EXPOSURE_FAIL or s.faces.sharpness < SHARPNESS_FAIL
+
+
+def _person_pool(group: Sequence[QualityScores]) -> tuple[list[int], bool]:
+    """Indices that compete in a person group, and whether the failure gate removed anyone.
+
+    Photos with a failed face only compete when no photo with a face passed. Photos without a
+    face are never failed: the face chain already ranks them behind every photo with a face."""
+    with_face = [i for i, s in enumerate(group) if s.faces]
+    passed = {i for i in with_face if not _face_failed(group[i])}
+    if not passed or len(passed) == len(with_face):
+        return list(range(len(group))), False
+    return [i for i, s in enumerate(group) if not s.faces or i in passed], True
+
+
 def _person_chain(group: Sequence[QualityScores]) -> list[Criterion]:
     chain = [FACE_DETECTED, CLOSED_EYES]
     if _smile_present(group):
@@ -206,7 +225,13 @@ def recommend(group: Sequence[QualityScores], deadband_scale: float = 1.0) -> Re
     if not group:
         raise ValueError("cannot recommend from an empty group")
     if is_person_group(group):
-        return select_best(group, _person_chain(group), _person_tiebreak, deadband_scale)
+        pool, gated = _person_pool(group)
+        members = [group[i] for i in pool]
+        rec = select_best(members, _person_chain(members), _person_tiebreak, deadband_scale)
+        winner = pool[rec.index]
+        if gated and sum(1 for i in pool if group[i].faces) == 1:
+            return Recommendation(winner, "gate", False)
+        return Recommendation(winner, rec.deciding_criterion, rec.tie)
     pool = _pool(group)
     members = [group[i] for i in pool]
     rec = select_best(members, _chain(members), _tiebreak, deadband_scale)
@@ -266,25 +291,27 @@ def criterion_rows(
 def _person_rows(
     group: Sequence[QualityScores], index: int, rec: Recommendation, deadband_scale: float
 ) -> list[CriterionRow]:
-    """Detail rows of a person group. Everything is judged among the photos with a face (the
-    ones that competed). The bar of "눈 감음" is the share ``(fewest + 1) / (this photo's + 1)``:
-    full for the photo with the fewest closed eyes, shorter for more."""
-    competing = [s for s in group if s.faces]
+    """Detail rows of a person group, judged among the photos that competed (photos with a failed
+    face are left out when the gate removed them: they cannot win, so they must not set the bars).
+    The bar of "눈 감음" is the share ``(fewest + 1) / (this photo's + 1)``: full for the photo
+    with the fewest closed eyes, shorter for more."""
+    pool, _gated = _person_pool(group)
+    competing = [group[i] for i in pool if group[i].faces]
     photo = group[index]
     criteria = [CLOSED_EYES, SMILE, FACE_SHARPNESS, FACE_EXPOSURE]
     if any(_composition(s) < 100.0 for s in competing):
         criteria.append(COMPOSITION)
     rows = []
     for c in criteria:
-        values = [c.key(s) for s in competing]
-        best = max(values) if c.higher_is_better else min(values)
-        skipped = c is SMILE and not _smile_present(group)
-        tied = skipped or max(values) - min(values) <= _margin(c, best, deadband_scale) + _EPS
+        pooled = [c.key(s) for s in competing]
+        best = max(pooled) if c.higher_is_better else min(pooled)
+        skipped = c is SMILE and not _smile_present([group[i] for i in pool])
+        tied = skipped or max(pooled) - min(pooled) <= _margin(c, best, deadband_scale) + _EPS
         value = c.key(photo)
         if not photo.faces:
             relative = 0.0
         elif c is CLOSED_EYES:
-            relative = (best + 1) / (value + 1)
+            relative = min(1.0, (best + 1) / (value + 1))
         else:
             relative = min(1.0, max(0.0, value / best)) if best > 0 else 1.0
         rows.append(CriterionRow(c.name, _LABELS[c.name], value, relative,

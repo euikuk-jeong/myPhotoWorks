@@ -29,7 +29,6 @@ def test_guide_no_longer_promises_a_composition_check_for_later(html):
 
 def test_guide_composition_and_af_numbers_match_the_real_constants(html):
     from myphotoworks.core.composition import CUT_MARGIN_RATIO, TILT_FREE_DEG
-
     from myphotoworks.core.ranking import COMPOSITION_DEADBAND
     from myphotoworks.core.subject import AF_REGION_FRACTION
 

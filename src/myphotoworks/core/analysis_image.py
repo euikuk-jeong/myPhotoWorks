@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Sequence
+from dataclasses import dataclass
 from pathlib import Path
 
 from PIL import Image, ImageOps
@@ -38,17 +39,27 @@ def _face_region(box: tuple[int, int, int, int]) -> tuple[float, float, float, f
     return x0 - mx, y0 - my, x1 + mx, y1 + my
 
 
-def load_face_crops(
+@dataclass(frozen=True)
+class FaceCrop:
+    """A face crop and where the detected face is inside it (``face_box`` in the pixels of
+    ``image``): a close neighbour in the margin can be nearer to the crop centre than the face
+    itself, and a face at the frame edge is not at the centre of its clamped crop."""
+
+    image: Image.Image
+    face_box: tuple[int, int, int, int]
+
+
+def face_crops(
     path: Path, boxes: Sequence[tuple[int, int, int, int]], analysis_size: tuple[int, int]
-) -> list[Image.Image]:
+) -> list[FaceCrop]:
     """RGB crops of faces from the original file, at a higher resolution than the analysis copy.
 
     ``boxes`` are faces in the pixel grid of the analysis copy (``analysis_size`` = its width and
     height, EXIF-rotated like ``load_analysis_image``); ``FACE_CROP_MARGIN`` of the face size is
     added on each side, clamped to the image. The file is opened once: JPEGs are decoded at the
     smallest reduced scale that still gives the *smallest* face region ``FACE_CROP_TARGET`` px, so
-    faces are cheap to re-read. Never upscales; each result is at most ``FACE_CROP_MAX_SIDE`` px
-    on its long side.
+    faces are cheap to re-read. Never upscales; each crop is at most ``FACE_CROP_MAX_SIDE`` px on
+    its long side. ``face_box`` of each result follows the clamping and shrinking.
     """
     if not boxes:
         return []
@@ -65,19 +76,32 @@ def load_face_crops(
             img.draft("RGB", (wanted, wanted))
         img = ImageOps.exif_transpose(img).convert("RGB")
         sx, sy = img.width / aw, img.height / ah
-        for region in regions:
+        for box, region in zip(boxes, regions, strict=True):
             left = min(img.width - 1, max(0, math.floor(region[0] * sx)))
             top = min(img.height - 1, max(0, math.floor(region[1] * sy)))
             right = min(img.width, max(left + 1, math.ceil(region[2] * sx)))
             bottom = min(img.height, max(top + 1, math.ceil(region[3] * sy)))
             crop = img.crop((left, top, right, bottom))
+            cut_w, cut_h = crop.size
             crop.thumbnail((FACE_CROP_MAX_SIDE, FACE_CROP_MAX_SIDE), Image.Resampling.LANCZOS)
-            crops.append(crop)
+            fx, fy = crop.width / cut_w, crop.height / cut_h
+            x0 = min(crop.width - 1, max(0, round((box[0] * sx - left) * fx)))
+            y0 = min(crop.height - 1, max(0, round((box[1] * sy - top) * fy)))
+            x1 = min(crop.width, max(x0 + 1, round((box[2] * sx - left) * fx)))
+            y1 = min(crop.height, max(y0 + 1, round((box[3] * sy - top) * fy)))
+            crops.append(FaceCrop(crop, (x0, y0, x1, y1)))
     return crops
+
+
+def load_face_crops(
+    path: Path, boxes: Sequence[tuple[int, int, int, int]], analysis_size: tuple[int, int]
+) -> list[Image.Image]:
+    """The crop images of ``face_crops``."""
+    return [c.image for c in face_crops(path, boxes, analysis_size)]
 
 
 def load_face_crop(
     path: Path, box: tuple[int, int, int, int], analysis_size: tuple[int, int]
 ) -> Image.Image:
-    """RGB crop of one face (see ``load_face_crops``)."""
+    """RGB crop of one face (see ``face_crops``)."""
     return load_face_crops(path, [box], analysis_size)[0]
