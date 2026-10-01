@@ -15,10 +15,11 @@ def test_faces_default_to_none():
     assert scores().faces is None
 
 
-def test_algorithm_version_marks_stage_two():
+def test_algorithm_version_names_the_v2_stage():
+    """The exact stage is pinned by the newest stage's test (``test_composition.py``)."""
     from myphotoworks.core.scoring import ALGORITHM_VERSION
 
-    assert ALGORITHM_VERSION == "v2-stage2"
+    assert ALGORITHM_VERSION.startswith("v2-stage")
 
 
 def test_rescore_corrected_remeasures_face_exposure_and_keeps_the_rest():

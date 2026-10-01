@@ -14,6 +14,7 @@ from dataclasses import dataclass, replace
 import numpy as np
 from PIL import Image
 
+from myphotoworks.core.composition import cut_faces, estimate_tilt
 from myphotoworks.core.faces import (
     Box,
     FaceMeasure,
@@ -31,7 +32,7 @@ IDEAL_MEAN = 118.0
 BLUR_ABS = 30.0                # subject sharpness below this is flagged as blur
 BLUR_REL = 0.6                 # ...or below this share of the group's best
 DEFAULT_WEIGHTS = (0.5, 0.3, 0.2)   # legacy baseline weights
-ALGORITHM_VERSION = "v2-stage2"  # recorded in exported labels; bump when scoring changes
+ALGORITHM_VERSION = "v2-stage3"  # recorded in exported labels; bump when scoring changes
 
 SHARP_TOP_PERCENT = 2.0        # share of strongest edge pixels averaged for subject sharpness
 SHARP_GRAD_CEIL = 150.0        # gradient (grey levels / px at half resolution) mapped to 100
@@ -55,6 +56,8 @@ class QualityScores:
     subject_bbox: tuple[int, int, int, int] | None = None
     # main faces of the photo (same pixel grid as ``subject_bbox``); None = no portrait
     faces: FaceSummary | None = None
+    # degrees the dominant lines are off the axes (see core/composition); None = no clear lines
+    tilt: float | None = None
 
 
 def _normalize_pixels(img: Image.Image) -> Image.Image:
@@ -175,7 +178,8 @@ def _face_summary(
     gray: np.ndarray, gray_corrected: np.ndarray, faces: Sequence[tuple[Box, Mapping | None]]
 ) -> FaceSummary:
     """Face sharpness from the uncorrected grey copy, face exposure from the corrected one; eyes
-    and smile from the blendshapes (``None`` = the landmarker saw nothing: neutral, eyes open)."""
+    and smile from the blendshapes (``None`` = the landmarker saw nothing: neutral, eyes open).
+    Faces touching the frame edge are counted as cut."""
     measures = []
     for box, shapes in faces:
         region = SubjectRegion(box, "face", 1.0)
@@ -183,26 +187,30 @@ def _face_summary(
         measures.append(FaceMeasure(
             box, eye_closed(shapes), smile_value(shapes),
             subject_sharpness(gray, region), subject_exposure(gray_corrected, region)))
-    return summarize_faces(measures)
+    summary = summarize_faces(measures)
+    cut = cut_faces(summary.boxes, (gray.shape[1], gray.shape[0]))
+    return replace(summary, cut=cut)
 
 
 def score_images(
     raw: Image.Image,
     corrected: Image.Image,
     faces: Sequence[tuple[Box, Mapping | None]] = (),
+    af_point: tuple[float, float] | None = None,
 ) -> QualityScores:
     """Subject sharpness / motion from the uncorrected image, subject exposure and colour from
     the corrected one. The subject is found once on the uncorrected copy. The legacy whole-frame
     ``sharpness`` / ``exposure`` stay 0 here; only the evaluation replay fills them.
 
     ``faces`` are the main faces as ``(box in the pixels of raw, blendshapes or None)``; with any,
-    they are the subject and ``QualityScores.faces`` is filled."""
+    they are the subject and ``QualityScores.faces`` is filled. Without faces, ``af_point`` (the
+    camera's AF point as shares of the frame) is the subject when it is known."""
     small = _normalize_pixels(raw)
     gray = np.asarray(small.convert("L"), dtype=np.float64)
     grid = [(b, shapes) for b, shapes in
             ((_scale_box(box, raw.size, small.size), shapes) for box, shapes in faces)
             if b is not None]
-    region = detect_subject(gray, [b for b, _ in grid])
+    region = detect_subject(gray, [b for b, _ in grid], af_point)
     gray_corrected = _gray_on_grid(corrected, small.size)
     return QualityScores(
         color=color_score(corrected),
@@ -212,6 +220,7 @@ def score_images(
         motion_ratio=motion_ratio(gray, region),
         subject_bbox=region.bbox,
         faces=_face_summary(gray, gray_corrected, grid) if grid else None,
+        tilt=estimate_tilt(gray),
     )
 
 

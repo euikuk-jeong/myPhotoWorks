@@ -223,7 +223,8 @@ def score_file(path: Path, face_engine=None) -> QualityScores:
     from myphotoworks.core.analysis_image import load_analysis_image
     from myphotoworks.core.pipeline import analyze_faces
     from myphotoworks.core.scoring import exposure_score, score_images, sharpness_score
+    from myphotoworks.utils.exif_reader import read_af_point
 
     raw = load_analysis_image(path)
-    return replace(score_images(raw, raw, analyze_faces(path, raw, face_engine)),
-                   sharpness=sharpness_score(raw), exposure=exposure_score(raw))
+    scores = score_images(raw, raw, analyze_faces(path, raw, face_engine), read_af_point(path))
+    return replace(scores, sharpness=sharpness_score(raw), exposure=exposure_score(raw))

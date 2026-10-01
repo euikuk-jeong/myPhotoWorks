@@ -7,6 +7,8 @@ from pathlib import Path
 
 import piexif
 
+from myphotoworks.core.afpoint import normalize_focus_point, parse_fuji_focus
+
 # ── lookup tables ────────────────────────────────────────────────────────────
 
 _METERING = {
@@ -177,8 +179,50 @@ def read_taken_at(path: Path) -> datetime | None:
         return None
 
 
+_ASPECT_TOLERANCE = 0.02   # a file whose shape differs from the EXIF pixel size was cropped
+
+
+def _af_point(exif_data: dict, path: Path) -> tuple[float, float] | None:
+    """The Fujifilm AF point as shares of the upright frame, or None whenever it cannot be
+    trusted (see ``read_af_point``)."""
+    try:
+        ifd0, exif_ifd = exif_data.get("0th", {}), exif_data.get("Exif", {})
+        if _decode(ifd0.get(piexif.ImageIFD.Make, b"")).upper() != "FUJIFILM":
+            return None
+        note = exif_ifd.get(piexif.ExifIFD.MakerNote)
+        focus = parse_fuji_focus(note) if isinstance(note, bytes) else None
+        if focus is None or not focus.af or focus.pixel is None:
+            return None
+        size = (exif_ifd.get(piexif.ExifIFD.PixelXDimension),
+                exif_ifd.get(piexif.ExifIFD.PixelYDimension))
+        if not all(isinstance(v, int) and v > 0 for v in size):
+            return None
+        from PIL import Image
+
+        with Image.open(path) as img:
+            actual = img.size                      # stored size; the EXIF dimensions are too
+        if abs((actual[0] / actual[1]) / (size[0] / size[1]) - 1.0) > _ASPECT_TOLERANCE:
+            return None
+        return normalize_focus_point(focus.pixel, size, ifd0.get(piexif.ImageIFD.Orientation))
+    except Exception:
+        return None
+
+
+def read_af_point(path: Path) -> tuple[float, float] | None:
+    """Camera AF point as shares (0..1) of the upright frame, only for trustworthy Fujifilm files.
+
+    Needs: Make FUJIFILM, a readable MakerNote with FocusMode Auto and a FocusPixel, EXIF pixel
+    dimensions with the point inside, and a file of the same shape (a downscaled copy is fine, a
+    crop is not). Manual lenses, scans and other makers give None.
+    """
+    try:
+        return _af_point(piexif.load(str(path)), path)
+    except Exception:
+        return None
+
+
 def read_hints(path: Path):
-    """Return ExifHints (focal length, lens model, f-number) — values may be None."""
+    """Return ExifHints (focal length, lens model, f-number, AF point) — values may be None."""
     from myphotoworks.core.grouping import ExifHints
 
     try:
@@ -194,4 +238,5 @@ def read_hints(path: Path):
         focal=focal if focal and focal > 0 else None,
         lens=lens,
         aperture=aperture if aperture and aperture > 0 else None,
+        af_point=_af_point(exif_data, path),
     )

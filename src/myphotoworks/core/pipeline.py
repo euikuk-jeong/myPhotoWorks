@@ -70,9 +70,12 @@ def analyze_photo(
 
     ``correct`` applies the user's correction settings so exposure / colour reflect the
     final result. Sharpness and the signature always use the uncorrected copy. ``face_engine``
-    (optional) finds the main faces: they become the subject and fill ``scores.faces``.
+    (optional) finds the main faces: they become the subject and fill ``scores.faces``. Without
+    faces, ``hints.af_point`` (the camera's AF point) is the subject when it is known.
     """
     raw = load_analysis_image(path, long_side)
     corrected = correct(raw.copy()) if correct is not None else raw
     faces = analyze_faces(path, raw, face_engine)
-    return Analysis(compute_signature(raw), score_images(raw, corrected, faces), taken, hints)
+    af_point = hints.af_point if hints is not None else None
+    scores = score_images(raw, corrected, faces, af_point)
+    return Analysis(compute_signature(raw), scores, taken, hints)

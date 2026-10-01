@@ -60,3 +60,10 @@ def test_evaluate_hands_the_face_engine_to_the_scoring(tmp_path):
     report = evaluate([label], "v2", face_engine=engine)
     assert len(report.results) == 1 and len(engine.detect_shapes) == 2
 
+
+def test_score_file_uses_the_fujifilm_af_point_like_the_grouping_run(tmp_path):
+    from myphotoworks.dev.eval_metrics import score_file
+    from tests.synthetic import fuji_jpeg
+
+    path = fuji_jpeg(tmp_path / "af.jpg", shallow_dof(seed=5), focus_pixel=(800, 600))
+    assert score_file(path).subject_source == "af"

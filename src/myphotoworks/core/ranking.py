@@ -11,6 +11,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Any
 
+from myphotoworks.core.composition import TILT_BADGE_DEG, composition_score
 from myphotoworks.core.scoring import QualityScores
 
 # ---- tunables (plan §7; tuned with the evaluation script) ----------------------------------
@@ -21,6 +22,7 @@ COLOR_IGNORE_BELOW = 8.0       # a group whose most colourful photo is below thi
 EXPOSURE_FAIL = 10.0           # subject exposure below this: subject (almost) black / blown out
 SHARPNESS_FAIL = 15.0          # subject sharpness below this: no usable detail at all
 TIEBREAK_WEIGHTS = (0.6, 0.3, 0.1)   # sharpness / exposure / colour, only used for ties
+COMPOSITION_DEADBAND = 10.0    # absolute points of composition_score
 SMILE_DEADBAND = 0.15          # absolute smile (0..1): a smaller gap does not decide
 SMILE_PRESENT_TH = 0.30        # smile only counts as a criterion if someone in the group reaches it
 PERSON_TIEBREAK_WEIGHTS = (0.6, 0.3, 0.1)   # face sharpness / face exposure / smile (x100), ties
@@ -104,9 +106,16 @@ SUBJECT_EXPOSURE = Criterion("subject_exposure", lambda s: s.subject_exposure, E
 COLOR = Criterion("color", lambda s: s.color, COLOR_DEADBAND)
 
 
+def _composition(s: QualityScores) -> float:
+    """0..100 composition score of a photo: tilted lines and faces cut by the frame cost points."""
+    return composition_score(s.tilt, s.faces.cut if s.faces else 0)
+
+
+COMPOSITION = Criterion("composition", _composition, COMPOSITION_DEADBAND)
+
 _LABELS = {"subject_sharpness": "주제 선명도", "subject_exposure": "주제 노출", "color": "색감",
            "face_detected": "얼굴 인식", "closed_eyes": "눈 감음", "smile": "웃음",
-           "face_sharpness": "얼굴 선명도", "face_exposure": "얼굴 노출"}
+           "face_sharpness": "얼굴 선명도", "face_exposure": "얼굴 노출", "composition": "구도"}
 
 
 # ---- person chain (stage 2): a group where at least one photo has a main face ------------------
@@ -135,7 +144,7 @@ def _person_chain(group: Sequence[QualityScores]) -> list[Criterion]:
     chain = [FACE_DETECTED, CLOSED_EYES]
     if _smile_present(group):
         chain.append(SMILE)
-    return chain + [FACE_SHARPNESS, FACE_EXPOSURE]
+    return chain + [FACE_SHARPNESS, FACE_EXPOSURE, COMPOSITION]
 
 
 def _person_tiebreak(s: QualityScores) -> float:
@@ -146,10 +155,21 @@ def _person_tiebreak(s: QualityScores) -> float:
 
 
 def face_badges(s: QualityScores) -> list[str]:
-    """Per-photo face facts for the badge line of a person group: "눈 감음 N명" / "얼굴 없음"."""
+    """Per-photo face facts for the badge line of a person group: "얼굴 없음", or "눈 감음 N명"
+    and "얼굴 잘림 N명"."""
     if not s.faces:
         return ["얼굴 없음"]
-    return [f"눈 감음 {s.faces.closed_eyes}명"] if s.faces.closed_eyes else []
+    badges = []
+    if s.faces.closed_eyes:
+        badges.append(f"눈 감음 {s.faces.closed_eyes}명")
+    if s.faces.cut:
+        badges.append(f"얼굴 잘림 {s.faces.cut}명")
+    return badges
+
+
+def tilt_badges(s: QualityScores) -> list[str]:
+    """"기울어짐" for a photo whose lines are tilted by ``TILT_BADGE_DEG`` or more."""
+    return ["기울어짐"] if s.tilt is not None and abs(s.tilt) >= TILT_BADGE_DEG else []
 
 
 def _tiebreak(s: QualityScores) -> float:
@@ -162,7 +182,7 @@ def _is_monochrome(group: Sequence[QualityScores]) -> bool:
 
 
 def _chain(group: Sequence[QualityScores]) -> list[Criterion]:
-    chain = [SUBJECT_SHARPNESS, SUBJECT_EXPOSURE]
+    chain = [SUBJECT_SHARPNESS, SUBJECT_EXPOSURE, COMPOSITION]
     if not _is_monochrome(group):
         chain.append(COLOR)
     return chain
@@ -220,12 +240,15 @@ def criterion_rows(
     which one decided, and which ones could not tell the photos apart. "Could not tell apart"
     is judged among the photos that actually competed in ``recommend`` (failed ones left out).
     A person group shows the four person criteria instead; a photo without a face gets empty
-    bars."""
+    bars. The composition row only appears when a competing photo has something to criticise."""
     if is_person_group(group):
         return _person_rows(group, index, rec, deadband_scale)
     pool = [group[i] for i in _pool(group)]
+    criteria = [SUBJECT_SHARPNESS, SUBJECT_EXPOSURE]
+    if any(_composition(s) < 100.0 for s in pool):
+        criteria.append(COMPOSITION)
     rows = []
-    for c in (SUBJECT_SHARPNESS, SUBJECT_EXPOSURE, COLOR):
+    for c in (*criteria, COLOR):
         values = [c.key(s) for s in group]
         best = max(values)
         pooled = [c.key(s) for s in pool]
@@ -248,8 +271,11 @@ def _person_rows(
     full for the photo with the fewest closed eyes, shorter for more."""
     competing = [s for s in group if s.faces]
     photo = group[index]
+    criteria = [CLOSED_EYES, SMILE, FACE_SHARPNESS, FACE_EXPOSURE]
+    if any(_composition(s) < 100.0 for s in competing):
+        criteria.append(COMPOSITION)
     rows = []
-    for c in (CLOSED_EYES, SMILE, FACE_SHARPNESS, FACE_EXPOSURE):
+    for c in criteria:
         values = [c.key(s) for s in competing]
         best = max(values) if c.higher_is_better else min(values)
         skipped = c is SMILE and not _smile_present(group)

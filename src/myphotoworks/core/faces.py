@@ -99,6 +99,7 @@ class FaceSummary:
     smile: float                # 0..1, face-size weighted
     sharpness: float            # 0..100, face-size weighted
     exposure: float             # 0..100, face-size weighted
+    cut: int = 0                # main faces touching the frame edge (stage 3, composition)
 
     @property
     def count(self) -> int:

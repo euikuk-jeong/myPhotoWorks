@@ -71,6 +71,7 @@ from myphotoworks.ui.thumbnail_panel import (
     checkbox_rect,
 )
 from myphotoworks.ui.zoom_view import ZoomPanView
+from myphotoworks.utils.selection_log import save_selection_log
 
 STRIP_ICON = 130
 STRIP_ROW_HEIGHT = STRIP_ICON + 52   # one row of cards incl. name and padding
@@ -367,12 +368,20 @@ class GroupReviewWindow(QWidget):
 
     changed = pyqtSignal()
 
-    def __init__(self, session: GroupSession, settings: AppSettings, parent=None) -> None:
+    def __init__(
+        self,
+        session: GroupSession,
+        settings: AppSettings,
+        parent=None,
+        log_dir: Path | None = None,
+    ) -> None:
         super().__init__(parent, Qt.WindowType.Window)
         self.setWindowTitle("그룹 리뷰")
         self.resize(1100, 720)
         self._session = session
         self._settings = settings
+        self._log_dir = log_dir          # selection log folder (None: the default one)
+        self._log_saved = False
         self._gid: int | None = None
         self._icons: dict[str, QIcon] = {}
         self._big: dict[str, QPixmap] = {}
@@ -384,6 +393,13 @@ class GroupReviewWindow(QWidget):
         groups = session.groups()
         if groups:
             self._select_group(groups[0].id)
+
+    def closeEvent(self, event) -> None:  # noqa: N802
+        """Keep a record of this review (recommended vs adopted), once per window."""
+        if self._settings.selection_log and not self._log_saved:
+            self._log_saved = True
+            save_selection_log(self._session, self._log_dir)
+        super().closeEvent(event)
 
     # ---------------------------------------------------------------- build
 
