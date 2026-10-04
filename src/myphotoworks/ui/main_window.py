@@ -24,6 +24,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from myphotoworks.core.grouping import natural_key
 from myphotoworks.models.photo_item import PhotoItem
 from myphotoworks.models.settings import AppSettings
 from myphotoworks.processing.group_runner import correction_key
@@ -41,6 +42,17 @@ SUPPORTED_FILTER = (
     "이미지 파일 (*.jpg *.jpeg *.png *.tif *.tiff *.bmp *.webp);;"
     "모든 파일 (*)"
 )
+
+def preview_order(photos: list[PhotoItem]) -> list[PhotoItem]:
+    """Photos in the order the preview walks them: by file name (natural numbers, no case).
+
+    The displayed order follows the groups (and the adopted-only filter), which group edits
+    leave out of name order; the preview ignores it. Same names are ordered by folder."""
+    return sorted(
+        photos,
+        key=lambda p: (natural_key(p.source_path.name), str(p.source_path.parent).lower()),
+    )
+
 
 _SYSMENU_ABOUT_ID = 0x1001  # custom Windows system-menu command ID
 _WM_SYSCOMMAND = 0x0112
@@ -284,7 +296,7 @@ class MainWindow(QMainWindow):
         self._file_label.setText(text)
 
     def _on_photo_double_clicked(self, photo: PhotoItem) -> None:
-        photos = self._thumb_panel.photos()
+        photos = preview_order(self._thumb_panel.photos())
         if not photos:
             return
         start_index = next(
@@ -302,7 +314,7 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
 
     def _on_preview(self) -> None:
-        photos = self._thumb_panel.photos()
+        photos = preview_order(self._thumb_panel.photos())
         if not photos:
             return
         self._open_preview(photos, 0)
