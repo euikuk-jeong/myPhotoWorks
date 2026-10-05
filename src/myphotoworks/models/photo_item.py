@@ -31,5 +31,6 @@ class PhotoItem:
     is_adopted: bool = False       # user's decision (starts equal to is_recommended)
     scores: "QualityScores | None" = None
     reason: str = ""
+    facts: tuple[str, ...] = ()    # notable facts of the photo ("눈 감음 1명", "기울어짐", "흐림")
     analysis: "Analysis | None" = None  # cached signature/scores from the last grouping run
     analysis_key: tuple | None = None   # correction settings the cached analysis was built with

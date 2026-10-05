@@ -33,7 +33,12 @@ def _parse(blob):
 def test_autofocus_and_the_focus_pixel_are_read():
     from myphotoworks.core.afpoint import FujiFocus
 
-    assert _parse(fuji_makernote(0, (1200, 900))) == FujiFocus(True, (1200, 900))
+    assert _parse(fuji_makernote(0, (1200, 900))) == FujiFocus(True, (1200, 900), 0)
+
+
+def test_the_raw_focus_mode_is_kept_for_the_debug_export():
+    assert _parse(fuji_makernote(1, (1200, 900))).mode == 1
+    assert _parse(fuji_makernote(65535, (1200, 900))).mode == 65535
 
 
 def test_manual_focus_is_not_autofocus():
@@ -61,7 +66,7 @@ def test_without_a_focus_mode_nothing_can_be_said():
 def test_the_order_of_the_entries_does_not_matter():
     from myphotoworks.core.afpoint import FujiFocus
 
-    assert _parse(fuji_makernote(0, (321, 654), reverse=True)) == FujiFocus(True, (321, 654))
+    assert _parse(fuji_makernote(0, (321, 654), reverse=True)) == FujiFocus(True, (321, 654), 0)
 
 
 @pytest.mark.parametrize("blob", [

@@ -62,6 +62,10 @@ class CriterionRow:
     relative: float       # value / group best, 0..1
     deciding: bool        # this criterion decided the group
     tied: bool            # the whole group is inside this criterion's deadband ("≈")
+    # against the recommended photo: -1..1 (positive = better) and better / worse / same (inside
+    # the deadband) / none (nothing to compare); the recommended photo itself is the centre line
+    delta: float = 0.0
+    verdict: str = "same"
 
 
 def _margin(criterion: Criterion, best: float, scale: float) -> float:
@@ -116,6 +120,7 @@ COMPOSITION = Criterion("composition", _composition, COMPOSITION_DEADBAND)
 _LABELS = {"subject_sharpness": "주제 선명도", "subject_exposure": "주제 노출", "color": "색감",
            "face_detected": "얼굴 인식", "closed_eyes": "눈 감음", "smile": "웃음",
            "face_sharpness": "얼굴 선명도", "face_exposure": "얼굴 노출", "composition": "구도"}
+CRITERION_LABELS = _LABELS      # public name: the explanations in core/explain write these
 
 
 # ---- person chain (stage 2): a group where at least one photo has a main face ------------------
@@ -240,6 +245,78 @@ def recommend(group: Sequence[QualityScores], deadband_scale: float = 1.0) -> Re
     return Recommendation(pool[rec.index], rec.deciding_criterion, rec.tie)
 
 
+@dataclass(frozen=True)
+class TraceStep:
+    """One criterion of the chain, as ``chain_trace`` saw it. Photo numbers are indices into the
+    group."""
+
+    name: str
+    label: str
+    values: dict[int, float]            # the photos still in the race and their values
+    alive_before: tuple[int, ...]
+    alive_after: tuple[int, ...]        # within the deadband of the best
+    margin: float                       # the deadband in the criterion's own unit
+    allowance: float                    # the (scaled) deadband setting: a share when ``relative``
+    relative: bool
+
+
+@dataclass(frozen=True)
+class ChainTrace:
+    """What ``recommend`` did, step by step. ``winner``, ``deciding`` and ``tie`` always equal
+    its result (``deciding`` is ``"gate"`` when the failure gate left one photo)."""
+
+    person: bool
+    pool: tuple[int, ...]               # photos that competed (the failure gate removed the rest)
+    gated: bool                         # the failure gate removed somebody
+    steps: tuple[TraceStep, ...]        # up to the step that left one photo, or all of them
+    winner: int
+    deciding: str | None
+    tie: bool
+
+
+def chain_trace(group: Sequence[QualityScores], deadband_scale: float = 1.0) -> ChainTrace:
+    """Replay ``recommend`` and keep every step, so that a sentence can say why. Kept next to
+    ``recommend``: the tests compare both on random groups."""
+    if not group:
+        raise ValueError("cannot recommend from an empty group")
+    person = is_person_group(group)
+    if person:
+        pool, gated = _person_pool(group)
+        members = [group[i] for i in pool]
+        criteria, tiebreak = _person_chain(members), _person_tiebreak
+    else:
+        pool = _pool(group)
+        gated = len(pool) < len(group)
+        members = [group[i] for i in pool]
+        criteria, tiebreak = _chain(members), _tiebreak
+    alive = list(range(len(members)))
+    steps: list[TraceStep] = []
+    deciding: str | None = None
+    tie = False
+    winner = 0
+    if len(alive) > 1:
+        for c in criteria:
+            values = {i: c.key(members[i]) for i in alive}
+            best = max(values.values()) if c.higher_is_better else min(values.values())
+            before = alive
+            alive = _survivors(members, alive, c, deadband_scale)
+            steps.append(TraceStep(
+                c.name, _LABELS[c.name], {pool[i]: v for i, v in values.items()},
+                tuple(pool[i] for i in before), tuple(pool[i] for i in alive),
+                _margin(c, best, deadband_scale), c.deadband * deadband_scale, c.relative))
+            if len(alive) == 1:
+                winner, deciding = alive[0], c.name
+                break
+        else:
+            winner = max(alive, key=lambda i: (tiebreak(members[i]), -i))
+            tie = True
+    winner = pool[winner]
+    one_left = (sum(1 for i in pool if group[i].faces) == 1) if person else len(pool) == 1
+    if gated and one_left:                  # the same case ``recommend`` calls "gate"
+        deciding, tie = "gate", False
+    return ChainTrace(person, tuple(pool), gated, tuple(steps), winner, deciding, tie)
+
+
 def reason_label(rec: Recommendation, group_size: int) -> str:
     """Badge text for the recommended photo: which criterion decided."""
     if group_size == 1:
@@ -253,6 +330,28 @@ def reason_label(rec: Recommendation, group_size: int) -> str:
     if rec.deciding_criterion in _LABELS:
         return f"{_LABELS[rec.deciding_criterion]} 우세"
     return ""
+
+
+# Full-scale span of a bar: the difference to the recommended photo that fills the half bar. A
+# share of the recommended photo's value for the relative criteria (sharpness), otherwise the
+# criterion's own unit (points, smile 0..1, people).
+_BAR_SPAN = {"subject_sharpness": 0.5, "subject_exposure": 40.0, "composition": 40.0,
+             "color": 40.0, "closed_eyes": 2.0, "smile": 0.5, "face_sharpness": 0.5,
+             "face_exposure": 40.0}
+
+
+def _versus(
+    c: Criterion, value: float, reference: float, best: float, scale: float
+) -> tuple[float, str]:
+    """How ``value`` compares with the recommended photo's ``reference``: a signed length
+    (positive = better, -1..1 of the half bar) and better / worse / same (inside the deadband)."""
+    diff = (value - reference) if c.higher_is_better else (reference - value)
+    if abs(diff) <= _margin(c, best, scale) + _EPS:
+        verdict = "same"
+    else:
+        verdict = "better" if diff > 0 else "worse"
+    size = diff / max(abs(reference), 1.0) if c.relative else diff
+    return max(-1.0, min(1.0, size / _BAR_SPAN[c.name])), verdict
 
 
 def criterion_rows(
@@ -283,8 +382,9 @@ def criterion_rows(
                 or pool_best - min(pooled) <= _margin(c, pool_best, deadband_scale) + _EPS)
         value = c.key(group[index])
         relative = min(1.0, max(0.0, value / best)) if best > 0 else 1.0
+        delta, verdict = _versus(c, value, c.key(group[rec.index]), pool_best, deadband_scale)
         rows.append(CriterionRow(c.name, _LABELS[c.name], value, relative,
-                                 rec.deciding_criterion == c.name, tied))
+                                 rec.deciding_criterion == c.name, tied, delta, verdict))
     return rows
 
 
@@ -308,14 +408,17 @@ def _person_rows(
         skipped = c is SMILE and not _smile_present([group[i] for i in pool])
         tied = skipped or max(pooled) - min(pooled) <= _margin(c, best, deadband_scale) + _EPS
         value = c.key(photo)
+        delta, verdict = 0.0, "none"
         if not photo.faces:
             relative = 0.0
-        elif c is CLOSED_EYES:
-            relative = min(1.0, (best + 1) / (value + 1))
         else:
-            relative = min(1.0, max(0.0, value / best)) if best > 0 else 1.0
+            if c is CLOSED_EYES:
+                relative = min(1.0, (best + 1) / (value + 1))
+            else:
+                relative = min(1.0, max(0.0, value / best)) if best > 0 else 1.0
+            delta, verdict = _versus(c, value, c.key(group[rec.index]), best, deadband_scale)
         rows.append(CriterionRow(c.name, _LABELS[c.name], value, relative,
-                                 rec.deciding_criterion == c.name, tied))
+                                 rec.deciding_criterion == c.name, tied, delta, verdict))
     return rows
 
 

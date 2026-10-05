@@ -28,6 +28,7 @@ from PyQt6.QtGui import (
     QShortcut,
 )
 from PyQt6.QtWidgets import (
+    QCheckBox,
     QFileDialog,
     QHBoxLayout,
     QLabel,
@@ -35,7 +36,6 @@ from PyQt6.QtWidgets import (
     QListWidgetItem,
     QMenu,
     QMessageBox,
-    QProgressBar,
     QPushButton,
     QSplitter,
     QStyle,
@@ -45,6 +45,12 @@ from PyQt6.QtWidgets import (
 )
 
 from myphotoworks.core.analysis_image import load_analysis_image
+from myphotoworks.core.explain import (
+    chain_overview,
+    explain_photo,
+    group_walkthrough,
+    subject_overlay,
+)
 from myphotoworks.core.ranking import (
     criterion_rows,
     is_person_group,
@@ -61,6 +67,8 @@ from myphotoworks.models.group_session import (
 from myphotoworks.models.photo_item import PhotoItem
 from myphotoworks.models.settings import AppSettings
 from myphotoworks.processing.export import export_adopted
+from myphotoworks.ui.diff_bar import DiffBar
+from myphotoworks.ui.method_dialog import MethodDialog
 from myphotoworks.ui.styles import tokens
 from myphotoworks.ui.thumbnail_panel import (
     _PHOTO_ROLE,
@@ -76,6 +84,10 @@ from myphotoworks.utils.selection_log import save_selection_log
 STRIP_ICON = 130
 STRIP_ROW_HEIGHT = STRIP_ICON + 52   # one row of cards incl. name and padding
 PREVIEW_LONG_SIDE = 1000   # fitted preview
+BAR_HINT = ("막대는 추천 사진(가운데 선)과 비교한 거예요. 오른쪽(초록)은 추천보다 좋고, "
+            "왼쪽(주황)은 나쁘며, 회색은 비슷해요.")
+BAR_HINT_RECOMMENDED = ("이 사진이 추천 사진이라 막대가 모두 가운데(기준)에 있어요. "
+                        "다른 사진을 고르면 이 사진과 비교해서 보여 줘요.")
 DETAIL_LONG_SIDE = 4000    # loaded on first zoom-in so detail is not blurry
 DETAIL_CACHE = 3
 GROUP_THUMB = 56
@@ -364,9 +376,11 @@ class GroupReviewWindow(QWidget):
     """Signals
     -------
     changed()  — adoption or group structure changed (main window should refresh)
+    subject_box_toggled(bool) — "측정 영역 보기" switched (main window keeps the choice)
     """
 
     changed = pyqtSignal()
+    subject_box_toggled = pyqtSignal(bool)
 
     def __init__(
         self,
@@ -374,6 +388,7 @@ class GroupReviewWindow(QWidget):
         settings: AppSettings,
         parent=None,
         log_dir: Path | None = None,
+        show_subject_box: bool = True,
     ) -> None:
         super().__init__(parent, Qt.WindowType.Window)
         self.setWindowTitle("그룹 리뷰")
@@ -381,6 +396,8 @@ class GroupReviewWindow(QWidget):
         self._session = session
         self._settings = settings
         self._log_dir = log_dir          # selection log folder (None: the default one)
+        self._show_subject_box = show_subject_box
+        self._method_dialog: MethodDialog | None = None
         self._gid: int | None = None
         self._icons: dict[str, QIcon] = {}
         self._big: dict[str, QPixmap] = {}
@@ -398,6 +415,8 @@ class GroupReviewWindow(QWidget):
         one log file is updated, and a write that failed is simply tried again next time."""
         if self._settings.selection_log:
             save_selection_log(self._session, self._log_dir)
+        if self._method_dialog is not None:
+            self._method_dialog.close()
         super().closeEvent(event)
 
     # ---------------------------------------------------------------- build
@@ -518,9 +537,37 @@ class GroupReviewWindow(QWidget):
         self._preview = ZoomPanView()
         self._preview.detail_requested.connect(self._request_detail)
         upper_layout.addWidget(self._preview, 1)
-        self._reason_label = QLabel()
+        self._preview.set_overlay_visible(self._show_subject_box)
+        info_row = QHBoxLayout()
+        info_row.setContentsMargins(0, 0, 0, 0)
+        text_col = QVBoxLayout()
+        text_col.setContentsMargins(0, 0, 0, 0)
+        text_col.setSpacing(2)
+        self._reason_label = QLabel()          # [state] why the photo is (not) recommended
         self._reason_label.setWordWrap(True)
-        upper_layout.addWidget(self._reason_label)
+        text_col.addWidget(self._reason_label)
+        self._facts_label = QLabel()           # facts about the photo, muted; hidden when none
+        self._facts_label.setObjectName("hint-label")
+        self._facts_label.setWordWrap(True)
+        self._facts_label.setVisible(False)
+        text_col.addWidget(self._facts_label)
+        info_row.addLayout(text_col, 1)
+        self._method_btn = QPushButton("추천 방식")
+        self._method_btn.setProperty("quiet", True)
+        self._method_btn.setToolTip(
+            "이 그룹이 어떤 기준을 어떤 순서로 비교해 추천을 고르는지 봅니다.")
+        self._method_btn.clicked.connect(self._on_method)
+        info_row.addWidget(self._method_btn, 0, Qt.AlignmentFlag.AlignTop)
+        self._overlay_cb = QCheckBox("측정 영역 보기")
+        self._overlay_cb.setToolTip(
+            "추천 점수를 잰 영역을 사진 위에 표시합니다.\n"
+            "파랑 = 얼굴 · 노랑 = AF 포인트 · 초록 = 가장 선명한 영역\n"
+            "회색 점선 = 중앙 (주제를 못 찾음)"
+        )
+        self._overlay_cb.setChecked(self._show_subject_box)
+        self._overlay_cb.toggled.connect(self._on_overlay_toggled)   # after: no signal at start
+        info_row.addWidget(self._overlay_cb, 0, Qt.AlignmentFlag.AlignTop)
+        upper_layout.addLayout(info_row)
         self._group_info = QLabel()
         self._group_info.setObjectName("hint-label")
         upper_layout.addWidget(self._group_info)
@@ -552,13 +599,13 @@ class GroupReviewWindow(QWidget):
         self._score_title = QLabel()
         self._score_title.setObjectName("scoreFile")
         box.addWidget(self._score_title)
-        hint = QLabel("막대는 그룹에서 가장 좋은 사진을 100으로 본 비율입니다.")
-        hint.setObjectName("hint-label")
-        hint.setWordWrap(True)
-        box.addWidget(hint)
+        self._bar_hint = QLabel(BAR_HINT)
+        self._bar_hint.setObjectName("hint-label")
+        self._bar_hint.setWordWrap(True)
+        box.addWidget(self._bar_hint)
         box.addSpacing(8)
 
-        self._bars: list[QProgressBar] = []
+        self._bars: list[DiffBar] = []
         self._bar_names: list[QLabel] = []
         self._bar_values: list[QLabel] = []
         self._score_box = box
@@ -594,9 +641,7 @@ class GroupReviewWindow(QWidget):
             value = QLabel()
             row.addWidget(value)
             rows.addLayout(row)
-            bar = QProgressBar()
-            bar.setRange(0, 100)
-            bar.setTextVisible(False)
+            bar = DiffBar()
             rows.addWidget(bar)
             rows.addSpacing(6)
             self._bars.append(bar)
@@ -714,8 +759,9 @@ class GroupReviewWindow(QWidget):
         if photo is None:
             self._preview.clear()
             self._preview.set_image("", None, "사진 없음")
-            self._reason_label.setText("")
+            self._set_reason("", "", ())
             return
+        overlay = subject_overlay(photo.scores)
         key = str(photo.source_path)
         if key not in self._big:
             try:
@@ -730,6 +776,7 @@ class GroupReviewWindow(QWidget):
         else:
             # same photo -> zoom/pan are kept; another photo -> back to "fit"
             self._preview.set_image(key, pm)
+            self._preview.set_overlay(overlay)
             if key in self._details:
                 self._preview.set_detail(key, self._details[key])
         state = "채택" if photo.is_adopted else "제외"
@@ -740,17 +787,65 @@ class GroupReviewWindow(QWidget):
         else:
             for name, bar, label in zip(self._bar_names, self._bars, self._bar_values,
                                         strict=True):
-                bar.setValue(0)
+                bar.set_delta(0.0, "none")
                 label.setText("-")
                 self._mark(name, bar, deciding=False, tied=False)
             self._show_faces(None)
             self._sens_label.setText("분석하지 못한 사진입니다")
-        rec = next((p for p in self._session.group(photo.group_id).photos if p.is_recommended),
-                   None)
-        reason = f"[{state}{star}] {photo.reason or '-'}"
-        if rec is not None and rec is not photo:
-            reason += f"   · 추천: {rec.source_path.name} ({rec.reason})"
-        self._reason_label.setText(reason)
+        explanation = self._explain(photo)
+        if explanation is None:
+            self._set_reason(f"[{state}{star}] 분석하지 못한 사진이에요", "", ())
+        else:
+            self._set_reason(f"[{state}{star}] {explanation.headline}",
+                             "\n".join(explanation.trace_lines), explanation.facts)
+        self._bar_hint.setText(BAR_HINT_RECOMMENDED if photo.is_recommended else BAR_HINT)
+        self._refresh_method_dialog()
+
+    def _method_content(self):
+        """The chain of the selected group (person chain when any photo has a main face) and how
+        it went through that group."""
+        scored = ([] if self._gid is None else
+                  [p for p in self._session.group(self._gid).photos if p.scores is not None])
+        table = [p.scores for p in scored]
+        sensitivity = self._session.sensitivity
+        overview = chain_overview(is_person_group(table), sensitivity)
+        walkthrough = group_walkthrough(table, [p.source_path.stem for p in scored], sensitivity)
+        return overview, walkthrough
+
+    def _on_method(self) -> None:
+        dialog = self._method_dialog
+        if dialog is not None and dialog.isVisible():
+            dialog.set_overview(*self._method_content())
+            dialog.raise_()
+            dialog.activateWindow()
+            return
+        overview, walkthrough = self._method_content()
+        self._method_dialog = MethodDialog(overview, self, walkthrough)
+        self._method_dialog.show()
+
+    def _refresh_method_dialog(self) -> None:
+        """Keep an open "추천 방식" dialog in step with the selected group."""
+        if self._method_dialog is not None and self._method_dialog.isVisible():
+            self._method_dialog.set_overview(*self._method_content())
+
+    def _explain(self, photo: PhotoItem):
+        """Sentence, trace and facts of ``photo`` within its group (``None``: not analysed)."""
+        if photo.scores is None:
+            return None
+        scored = [p for p in self._session.group(photo.group_id).photos if p.scores is not None]
+        k = next(i for i, p in enumerate(scored) if p is photo)
+        return explain_photo([p.scores for p in scored], k,
+                             [p.source_path.stem for p in scored], self._session.sensitivity)
+
+    def _set_reason(self, text: str, tooltip: str, facts: tuple[str, ...]) -> None:
+        self._reason_label.setText(text)
+        self._reason_label.setToolTip(tooltip)
+        self._facts_label.setText(" · ".join(facts))
+        self._facts_label.setVisible(bool(facts))
+
+    def _on_overlay_toggled(self, checked: bool) -> None:
+        self._preview.set_overlay_visible(checked)
+        self.subject_box_toggled.emit(checked)
 
     def _show_criteria(self, photo: PhotoItem) -> None:
         """Fill the detail panel from the chain: bars are relative to the group's best photo."""
@@ -767,7 +862,7 @@ class GroupReviewWindow(QWidget):
         faceless = is_person_group(table) and table[k].faces is None
         for row, name, bar, label in zip(rows, self._bar_names, self._bars, self._bar_values,
                                          strict=True):
-            bar.setValue(round(row.relative * 100))
+            bar.set_delta(row.delta, row.verdict)
             label.setText("-" if faceless else self._value_text(row))
             name.setText(f"{row.label} ≈" if row.tied else row.label)
             self._mark(name, bar, row.deciding, row.tied)
@@ -789,13 +884,15 @@ class GroupReviewWindow(QWidget):
         self._face_label.show()
 
     @staticmethod
-    def _mark(name: QLabel, bar: QProgressBar, deciding: bool, tied: bool) -> None:
-        """Dynamic QSS properties: the deciding criterion is emphasised, tied ones are dimmed."""
+    def _mark(name: QLabel, bar: DiffBar, deciding: bool, tied: bool) -> None:
+        """Dynamic QSS properties: the deciding criterion is emphasised (its bar is thicker),
+        tied ones are dimmed."""
         for widget in (name, bar):
             widget.setProperty("deciding", deciding)
             widget.setProperty("tied", tied)
             widget.style().unpolish(widget)
             widget.style().polish(widget)
+            widget.update()
 
     def _update_side_widgets(self) -> None:
         ids = [g.id for g in self._session.groups()]

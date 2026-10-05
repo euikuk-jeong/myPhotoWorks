@@ -2,15 +2,36 @@
 from __future__ import annotations
 
 from PyQt6.QtCore import QPointF, QRectF, Qt, pyqtSignal
-from PyQt6.QtGui import QColor, QFont, QPainter, QPixmap, QWheelEvent
+from PyQt6.QtGui import QColor, QFont, QFontMetricsF, QPainter, QPen, QPixmap, QWheelEvent
 from PyQt6.QtWidgets import QWidget
 
+from myphotoworks.core.explain import OverlayBox
 from myphotoworks.ui.styles import tokens
 
 ZOOM_STEP = 1.15
 MAX_ZOOM = 8.0            # relative to the logical image size (see set_image)
 DETAIL_TRIGGER = 1.05     # ask for a sharper image once zoomed past fit * this
 HINT_H = 22               # strip under the image for the zoom / controls hint
+
+# Overlay boxes sit on photos of any colour, so they are brighter than the UI tokens. One colour
+# per source of the measured area; the centre fallback (nothing found) is grey and dashed.
+_OVERLAY_COLORS = {
+    "face": "#5cb8ff",
+    "af": "#ffc247",
+    "sharpest": "#6fdc8c",
+    "center": "#c8c8cc",
+}
+_OVERLAY_DEFAULT = tokens.TEXT_STRONG
+_OVERLAY_WIDTH = 2.0
+
+
+def overlay_pen(source: str) -> QPen:
+    """Pen of an overlay box: colour by source, dashed for the centre fallback."""
+    pen = QPen(QColor(_OVERLAY_COLORS.get(source, _OVERLAY_DEFAULT)), _OVERLAY_WIDTH)
+    pen.setCosmetic(True)                  # same line width at every zoom
+    if source == "center":
+        pen.setStyle(Qt.PenStyle.DashLine)
+    return pen
 
 
 class ZoomPanView(QWidget):
@@ -48,6 +69,8 @@ class ZoomPanView(QWidget):
         self._user_zoomed = False
         self._drag_start: QPointF | None = None
         self._drag_offset = QPointF(0.0, 0.0)
+        self._overlay: list[OverlayBox] = []
+        self._overlay_visible = True
 
     # ------------------------------------------------------------------ API
 
@@ -76,10 +99,39 @@ class ZoomPanView(QWidget):
         fit = self.fit_zoom()
         return self._zoom / fit if fit > 0 else 1.0
 
+    @property
+    def overlay_visible(self) -> bool:
+        return self._overlay_visible
+
+    def set_overlay(self, boxes) -> None:
+        """Boxes (``OverlayBox``, rect in shares of the frame) drawn on the shown photo."""
+        self._overlay = list(boxes)
+        self.update()
+
+    def set_overlay_visible(self, visible: bool) -> None:
+        self._overlay_visible = bool(visible)
+        self.update()
+
+    def overlay_rects(self) -> list[tuple[OverlayBox, QRectF]]:
+        """The boxes drawn right now with their rectangles in widget pixels (follows zoom and
+        pan). Empty while the overlay is hidden or no image is shown."""
+        if not self._overlay_visible or self._pixmap is None or not self._overlay:
+            return []
+        img = self._image_rect()
+        return [
+            (b, QRectF(img.x() + b.rect[0] * img.width(), img.y() + b.rect[1] * img.height(),
+                       (b.rect[2] - b.rect[0]) * img.width(),
+                       (b.rect[3] - b.rect[1]) * img.height()))
+            for b in self._overlay
+        ]
+
     def set_image(self, key: str, pixmap: QPixmap | None, message: str = "") -> None:
         """Show ``pixmap``. Same ``key`` as before keeps the current zoom and position;
-        a different key resets to fit. The pixmap's size defines the logical size."""
+        a different key resets to fit and drops the overlay (it belongs to the old photo).
+        The pixmap's size defines the logical size."""
         same = key == self._key and pixmap is not None and self._pixmap is not None
+        if not same:
+            self._overlay = []
         self._key = key
         self._message = message
         if pixmap is None or pixmap.isNull():
@@ -119,6 +171,7 @@ class ZoomPanView(QWidget):
         self._key = None
         self._pixmap = None
         self._has_detail = False
+        self._overlay = []
         self.update()
 
     # ------------------------------------------------------------------ helpers
@@ -153,6 +206,7 @@ class ZoomPanView(QWidget):
         painter.save()
         painter.setClipRect(QRectF(0, 0, self.width(), self._view_h()))  # keep off the hint
         painter.drawPixmap(self._image_rect(), self._pixmap, QRectF(self._pixmap.rect()))
+        self._paint_overlay(painter)
         painter.restore()
 
         rel = self.relative_zoom()
@@ -165,6 +219,35 @@ class ZoomPanView(QWidget):
         painter.drawText(QRectF(4, self._view_h(), self.width() - 8, HINT_H),
                          Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
                          f"{text}   {hint}")
+
+    def _paint_overlay(self, painter: QPainter) -> None:
+        """Boxes of the measured area; the label (first box of a photo) sits on a chip of the
+        box colour at its top-left corner, above the box when there is room."""
+        rects = self.overlay_rects()
+        if not rects:
+            return
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        font = QFont(painter.font())
+        font.setPointSize(9)
+        font.setBold(True)
+        metrics = QFontMetricsF(font)
+        for box, rect in rects:
+            pen = overlay_pen(box.source)
+            painter.setPen(pen)
+            painter.drawRect(rect)
+            if not box.label:
+                continue
+            w, h = metrics.horizontalAdvance(box.label) + 10.0, metrics.height() + 2.0
+            top = rect.top() - h if rect.top() - h >= 0 else rect.top()
+            chip = QRectF(max(0.0, rect.left()), top, w, h)
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(pen.color())
+            painter.drawRect(chip)
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.setFont(font)
+            painter.setPen(QColor(tokens.ON_PRIMARY))
+            painter.drawText(chip, Qt.AlignmentFlag.AlignCenter, box.label)
 
     # ------------------------------------------------------------------ input
 

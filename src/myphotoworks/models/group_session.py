@@ -6,14 +6,9 @@ import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
-from myphotoworks.core.ranking import (
-    face_badges,
-    is_person_group,
-    reason_label,
-    recommend,
-    tilt_badges,
-)
-from myphotoworks.core.scoring import ALGORITHM_VERSION, is_blurry
+from myphotoworks.core.explain import photo_facts
+from myphotoworks.core.ranking import reason_label, recommend
+from myphotoworks.core.scoring import ALGORITHM_VERSION
 from myphotoworks.models.photo_item import PhotoItem
 
 TAG_REVIEWED = "추천 채택"
@@ -106,8 +101,13 @@ class GroupSession:
         """Deadband multiplier the recommendations were made with (normal = 1.0)."""
         return self._sensitivity
 
-    def to_label_dict(self, root: Path | None = None, source: str = "user") -> dict:
+    def to_label_dict(self, root: Path | None = None, source: str = "user",
+                      photo_info=None) -> dict:
         """Snapshot of the user's decisions as an evaluation label (schema 1).
+
+        ``photo_info`` (developer export only): ``photo -> dict``, added as ``photos`` next to
+        ``files`` (same order), together with the group's ``number``, the "그룹 N" of the review
+        window.
 
         ``reviewed``: the user opened or edited the group. Untouched groups only mirror the
         recommendation and must not be counted as labels. ``edited``: the user's pick differs
@@ -131,21 +131,25 @@ class GroupSession:
                 return p.source_path.as_posix()
 
         groups = []
-        for gid in self._order:
+        for number, gid in enumerate(self._order, start=1):
             members = self._members[gid]
             if len(members) < 2:
                 continue
             picked = [rel(p) for p in members if p.is_adopted]
             recommended = next((rel(p) for p in members if p.is_recommended), None)
             reviewed = self.tag(gid) != TAG_TODO
-            groups.append({
+            entry = {
                 "id": gid,
                 "files": [rel(p) for p in members],
                 "picked": picked,
                 "recommended": recommended,
                 "reviewed": reviewed,
                 "edited": reviewed and picked != [recommended],
-            })
+            }
+            if photo_info is not None:      # developer export only; the selection log stays lean
+                entry["number"] = number
+                entry["photos"] = [{"file": rel(p), **photo_info(p)} for p in members]
+            groups.append(entry)
         return {
             "schema": 1,
             "source": source,
@@ -210,7 +214,7 @@ class GroupSession:
             self._order.append(gid)
             self._members[gid] = [p]
             p.group_id, p.scores = gid, None
-            p.is_recommended, p.is_adopted, p.reason = False, True, ""
+            p.is_recommended, p.is_adopted, p.reason, p.facts = False, True, "", ()
             self._photos.append(p)
             self._added.add(id(p))
         self._undo.clear()  # snapshots would not know these photos
@@ -330,14 +334,8 @@ class GroupSession:
             return
         table = [p.scores for p in scored]
         rec = recommend(table, self._sensitivity)
-        person = len(table) > 1 and is_person_group(table)
         for k, p in enumerate(scored):
             p.is_recommended = k == rec.index
+            p.facts = photo_facts(table, k)
             parts = [reason_label(rec, len(table))] if k == rec.index else []
-            if person:
-                parts += face_badges(table[k])
-            if len(table) > 1:
-                parts += tilt_badges(table[k])
-            if is_blurry(table[k], table):
-                parts.append("흐림")
-            p.reason = " · ".join(parts)
+            p.reason = " · ".join(parts + list(p.facts))
