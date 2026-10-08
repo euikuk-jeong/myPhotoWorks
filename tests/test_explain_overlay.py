@@ -156,7 +156,6 @@ def test_boxes_without_area_are_dropped():
 
 def test_scored_landscape_photo_puts_the_face_where_it_is_in_the_original():
     from myphotoworks.core.explain import subject_overlay
-
     from myphotoworks.core.scoring import score_images
 
     raw = _img(2000, 1500)
@@ -168,7 +167,6 @@ def test_scored_landscape_photo_puts_the_face_where_it_is_in_the_original():
 
 def test_scored_portrait_photo_puts_the_face_where_it_is_in_the_original():
     from myphotoworks.core.explain import subject_overlay
-
     from myphotoworks.core.scoring import score_images
 
     raw = _img(1500, 2000)
