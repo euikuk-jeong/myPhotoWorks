@@ -179,10 +179,11 @@ def _person_tiebreak(s: QualityScores) -> float:
 
 
 def face_badges(s: QualityScores) -> list[str]:
-    """Per-photo face facts for the badge line of a person group: "얼굴 없음", or "눈 감음 N명"
-    and "얼굴 잘림 N명"."""
+    """Per-photo face facts for the badge line of a person group: "얼굴 인식 안 됨" (the detector
+    found no main face - that is not the same as "there is no face"), or "눈 감음 N명" and
+    "얼굴 잘림 N명"."""
     if not s.faces:
-        return ["얼굴 없음"]
+        return ["얼굴 인식 안 됨"]
     badges = []
     if s.faces.closed_eyes:
         badges.append(f"눈 감음 {s.faces.closed_eyes}명")

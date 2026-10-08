@@ -125,7 +125,9 @@ class FaceEngine(Protocol):
     """What the pipeline needs from a face model. Both calls take uint8 RGB arrays (H, W, 3)."""
 
     def detect(self, rgb: np.ndarray) -> list[Box]:
-        """Face boxes in the pixels of ``rgb``."""
+        """Face boxes in the pixels of ``rgb``. An engine may also offer
+        ``detect_scored(rgb) -> [(box, score)]``, which ``core/face_detect`` prefers: it keeps
+        confident faces and finds small ones in tiles."""
 
     def blendshapes(
         self, rgb: np.ndarray, face_box: Box | None = None
@@ -157,15 +159,20 @@ class MediaPipeFaceEngine:
         return self._mp.Image(image_format=self._mp.ImageFormat.SRGB,
                               data=np.ascontiguousarray(rgb))
 
-    def detect(self, rgb: np.ndarray) -> list[Box]:
+    def detect_scored(self, rgb: np.ndarray) -> list[tuple[Box, float]]:
+        """Face boxes with the detector's score (0..1); ``core/face_detect`` filters on it."""
         with self._lock:
             result = self._detector.detect(self._image(rgb))
-        boxes = []
+        found = []
         for d in result.detections:
             b = d.bounding_box
-            boxes.append((max(0, b.origin_x), max(0, b.origin_y),
-                          b.origin_x + b.width, b.origin_y + b.height))
-        return boxes
+            score = d.categories[0].score if d.categories else 0.0
+            found.append(((max(0, b.origin_x), max(0, b.origin_y),
+                           b.origin_x + b.width, b.origin_y + b.height), float(score)))
+        return found
+
+    def detect(self, rgb: np.ndarray) -> list[Box]:
+        return [box for box, _ in self.detect_scored(rgb)]
 
     def blendshapes(
         self, rgb: np.ndarray, face_box: Box | None = None

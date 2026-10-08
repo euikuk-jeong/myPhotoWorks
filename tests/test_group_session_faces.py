@@ -5,7 +5,7 @@ from ``ranking.reason_label``), then per-photo face facts, then the blur flag (t
 looks for "흐림" in it):
 
     "눈 감음 N명"   photo of a person group with N > 0 closed-eye main faces
-    "얼굴 없음"      photo of a person group without a main face
+    "얼굴 인식 안 됨"  photo of a person group without a main face (not found, not "no face")
     "흐림"           unchanged
 
 Single-photo groups keep exactly "단독 사진"; groups without any face keep the stage-1 texts.
@@ -48,7 +48,7 @@ def test_photos_with_closed_eyes_show_how_many_people_blinked():
 def test_a_faceless_photo_in_a_person_group_is_badged():
     _, ps = make([("a", scores(95, 90, 80)), ("b", person(face_sharp=40))], [[0, 1]])
     assert ps[1].is_recommended and ps[1].reason == "얼굴 인식 우세"
-    assert ps[0].reason == "얼굴 없음"
+    assert ps[0].reason == "얼굴 인식 안 됨"
 
 
 def test_the_blur_badge_stays_next_to_the_face_badges():
@@ -96,7 +96,7 @@ def test_recommendation_is_refreshed_when_a_faceless_photo_joins_a_person_group(
     assert ps[1].is_recommended
     s.merge(0, 1)                                    # c joins: it is faceless and ranks last
     assert ps[1].is_recommended and not ps[2].is_recommended
-    assert ps[2].reason == "얼굴 없음"
+    assert ps[2].reason == "얼굴 인식 안 됨"
 
 
 def test_blur_in_a_person_group_compares_faces_with_faces_and_the_rest_with_the_rest():

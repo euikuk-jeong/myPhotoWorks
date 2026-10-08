@@ -258,7 +258,7 @@ def test_facts_name_a_blurry_photo():
 
 
 def test_facts_name_a_faceless_photo_in_a_person_group():
-    assert _explain([person(), scores()], 1).facts == ("얼굴 없음",)
+    assert _explain([person(), scores()], 1).facts == ("얼굴 인식 안 됨",)
 
 
 def test_facts_name_cut_faces():

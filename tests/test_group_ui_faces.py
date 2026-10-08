@@ -85,7 +85,7 @@ def test_a_faceless_photo_of_a_person_group_shows_empty_bars(qtbot, tmp_path):
     win, _ = _review(qtbot, tmp_path, [person(), scores(90, 90, 90)])
     win._strip.setCurrentRow(1)
     assert _values(win) == [0, 0, 0, 0]
-    assert win._facts_label.text() == "얼굴 없음"            # fact line; the sentence says why
+    assert win._facts_label.text() == "얼굴 인식 안 됨"     # fact line; the sentence says why
     assert "얼굴이 인식되지 않아" in win._reason_label.text()
     assert [v.text() for v in win._bar_values if v.isVisibleTo(win)] == ["-"] * 4   # no fake "0"
 

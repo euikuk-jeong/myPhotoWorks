@@ -2,10 +2,10 @@
 
 ``PhotoItem.facts`` (filled by ``GroupSession`` from the same ``explain.photo_facts`` the review
 window's second line uses) lists what is notable about one photo: "눈 감음 N명", "얼굴 잘림 N명",
-"기울어짐", "얼굴 없음", "흐림". On a card the badges sit in the bottom-right corner of the photo,
-stacked upwards, in the same style as the existing "흐림" badge (which keeps its own spot at the
-bottom-left and is not repeated). They follow "추천 이유 표시". At most ``MAX_FACT_BADGES`` are
-drawn, the rest is counted ("+2"); the tooltip still lists everything.
+"기울어짐", "얼굴 인식 안 됨", "흐림". On a card the badges sit in the bottom-right corner of the
+photo, stacked upwards, in the same style as the existing "흐림" badge (which keeps its own spot
+at the bottom-left and is not repeated). They follow "추천 이유 표시". At most
+``MAX_FACT_BADGES`` are drawn, the rest is counted ("+2"); the tooltip still lists everything.
 """
 import os
 

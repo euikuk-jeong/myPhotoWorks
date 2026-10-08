@@ -1,7 +1,7 @@
 """Recommendation v2, stage 3 — GroupSession badges for composition (plan §6-1).
 
 ``PhotoItem.reason`` stays ``" · "``-joined. Order: deciding criterion (recommended photo only),
-then the person-group face facts of stage 2 ("얼굴 없음" / "눈 감음 N명"), then
+then the person-group face facts of stage 2 ("얼굴 인식 안 됨" / "눈 감음 N명"), then
 
     "얼굴 잘림 N명"   person-group photo with N > 0 main faces touching the frame edge
     "기울어짐"        |tilt| >= ``composition.TILT_BADGE_DEG`` (any group of two or more)
@@ -79,7 +79,7 @@ def test_all_badges_come_in_a_fixed_order():
 def test_a_faceless_photo_of_a_person_group_can_be_tilted_too():
     _, ps = make([("a", scores(95, 90, 80, tilt=_badge_tilt())), ("b", person(face_sharp=40))],
                  [[0, 1]])
-    assert ps[0].reason == "얼굴 없음 · 기울어짐"
+    assert ps[0].reason == "얼굴 인식 안 됨 · 기울어짐"
 
 
 def test_single_photos_get_no_composition_badges():

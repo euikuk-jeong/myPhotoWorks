@@ -200,7 +200,7 @@ footer{margin-top:60px;color:var(--muted);font-size:14px;border-top:1px solid va
 <tr><td>높음 (×0.6)</td><td>6% 이내</td><td>8.7% 차이는 의미 있음 → 선명도로 <b>사진 1</b></td></tr></table></div>
 <p>그룹 탭 “추천 민감도 (고급)”에서 고릅니다. <b>높을수록</b> 작은 차이도 승부로 보고, <b>낮을수록</b> “차이 미미”가 늘어납니다. 바꾸면 사진을 다시 읽지 않고 <b>즉시</b> 추천이 갱신되고, 내가 직접 채택을 바꾼 그룹은 <b>내 선택을 유지</b>하며 ★ 표시만 새로 바뀝니다.</p>
 <h3>사람 사진은 얼굴로 비교해요</h3>
-<p>그룹에 <b>얼굴이 보이는 사진이 한 장이라도 있으면 “인물 그룹”</b>으로 보고, 위 표 대신 얼굴 기준으로 비교합니다. 얼굴은 Google <b>MediaPipe</b> 모델로 이 컴퓨터 안에서 찾으며(사진을 밖으로 보내지 않아요), 얼굴이 있는 사진만 원본에서 얼굴 부분을 다시 읽어 눈·입 모양을 자세히 봅니다.</p>
+<p>그룹에 <b>얼굴이 보이는 사진이 한 장이라도 있으면 “인물 그룹”</b>으로 보고, 위 표 대신 얼굴 기준으로 비교합니다. 얼굴은 Google <b>MediaPipe</b> 모델로 이 컴퓨터 안에서 찾으며(사진을 밖으로 보내지 않아요), 사진 전체에서 확신이 서지 않으면 사진을 겹치는 조각으로 나눠 작은 얼굴도 다시 찾고 신뢰도가 낮은 결과(전시 패널·그림자 같은 얼굴 아닌 것)는 버립니다. 얼굴이 있는 사진만 원본에서 얼굴 부분을 다시 읽어 눈·입 모양을 자세히 봅니다.</p>
 <ul><li><b>주요 인물</b>은 가장 큰 얼굴 면적의 25% 이상인 얼굴입니다. 배경에 작게 찍힌 행인은 세지 않아요.</li>
 <li>가장 큰 얼굴도 사진 폭의 3%보다 좁으면 인물 사진이 아닌 것으로 봅니다. 풍경 속에 작게 찍힌 사람 때문에 풍경 사진이 인물 그룹이 되지 않게 하기 위해서예요.</li>
 <li><b>눈 감음</b>: 두 눈 중 한쪽이라도 깜빡임 수치가 <b>0.50 이상</b>이면 감은 것으로 셉니다. 사진마다 “주요 인물 중 눈 감은 사람 수”를 구해요.</li>
@@ -219,11 +219,11 @@ footer{margin-top:60px;color:var(--muted);font-size:14px;border-top:1px solid va
 <table><tr><th>배지</th><th>뜻</th></tr>
 <tr><td>눈 감음 적음 · 웃음 우세 · 얼굴 선명도 우세 · 얼굴 노출 우세 · 얼굴 인식 우세</td><td>★ 사진에 붙는 <b>결정 기준</b></td></tr>
 <tr><td>눈 감음 N명</td><td>인물 그룹에서 눈 감은 사람이 있는 사진 (★가 아니어도 표시)</td></tr>
-<tr><td>얼굴 없음</td><td>인물 그룹인데 이 사진에서는 주요 얼굴을 찾지 못함</td></tr></table>
+<tr><td>얼굴 인식 안 됨</td><td>인물 그룹인데 이 사진에서는 주요 얼굴을 찾지 못함 (얼굴이 없다는 뜻이 아니라 프로그램이 인식하지 못했다는 뜻이에요)</td></tr></table>
 <div class="example"><span class="tag">예제 6</span><b>단체 사진 3장 중 추천은?</b>
 <div class="three" style="margin-top:8px"><div class="scorecard"><div class="sc-title">IMG_0501</div><div class="barrow"><span class="barlabel">눈 감음</span><span class="bartrack"><span class="barfill" style="width:50%;background:var(--bad)"></span></span><span class="barval">1명</span><span class="barnote"></span></div><div class="barrow"><span class="barlabel">웃음</span><span class="bartrack"><span class="barfill" style="width:100%;background:var(--good)"></span></span><span class="barval">85%</span><span class="barnote"></span></div><div class="barrow"><span class="barlabel">얼굴 선명도</span><span class="bartrack"><span class="barfill" style="width:100%;background:var(--accent)"></span></span><span class="barval">90</span><span class="barnote"></span></div><div class="barrow"><span class="barlabel">얼굴 노출</span><span class="bartrack"><span class="barfill" style="width:100%;background:var(--warn)"></span></span><span class="barval">82</span><span class="barnote"></span></div></div><div class="scorecard win"><div class="sc-title">IMG_0502 <span class="star">★ 추천</span></div><div class="barrow"><span class="barlabel">눈 감음</span><span class="bartrack"><span class="barfill" style="width:100%;background:var(--bad)"></span></span><span class="barval">0명</span><span class="barnote">결정</span></div><div class="barrow"><span class="barlabel">웃음</span><span class="bartrack"><span class="barfill" style="width:47%;background:var(--good)"></span></span><span class="barval">40%</span><span class="barnote"></span></div><div class="barrow"><span class="barlabel">얼굴 선명도</span><span class="bartrack"><span class="barfill" style="width:89%;background:var(--accent)"></span></span><span class="barval">80</span><span class="barnote"></span></div><div class="barrow"><span class="barlabel">얼굴 노출</span><span class="bartrack"><span class="barfill" style="width:95%;background:var(--warn)"></span></span><span class="barval">78</span><span class="barnote"></span></div></div><div class="scorecard"><div class="sc-title">IMG_0503</div><div class="cap">모두 뒤돌아봐서 얼굴을 찾지 못함</div></div></div>
 <p style="margin-top:10px">① 얼굴 인식: IMG_0503은 얼굴이 없어 뒤로 밀립니다. ② 눈 감음: IMG_0501은 3명 중 1명이 감았고 IMG_0502는 0명 → <b>IMG_0502 승</b>, 눈 감음이 결정 기준입니다. IMG_0501이 더 활짝 웃고 더 선명해도 눈 감음이 먼저라 그 기준까지 가지 않아요.</p>
-<p>표시되는 배지: IMG_0502 “눈 감음 적음”, IMG_0501 “눈 감음 1명”, IMG_0503 “얼굴 없음”.</p></div>
+<p>표시되는 배지: IMG_0502 “눈 감음 적음”, IMG_0501 “눈 감음 1명”, IMG_0503 “얼굴 인식 안 됨”.</p></div>
 <h3>구도 — 기울기와 얼굴 잘림</h3>
 <p>선명도·노출이 비슷한 사진끼리는 <b>구도</b>를 비교합니다. 구도 점수는 100점에서 시작해 감점되는 방식이에요. 전체 균형이나 삼분할 같은 것은 보지 않고, 두 가지만 봅니다.</p>
 <ul><li><b>수평(기울기)</b>: 수평선·건물·창틀처럼 뚜렷한 직선이 한 방향으로 모여 있을 때, 그 직선이 가로·세로에서 얼마나 기울었는지 잽니다. 1° 이하는 감점이 없고, 그보다 기울면 1°당 6점씩 감점돼요(최대 60점). 뚜렷한 직선이 없는 사진(숲·물결 등)은 기울기를 재지 않습니다. 가로·세로에서 15° 넘게 기울어진 직선은 계단·지붕·레일처럼 일부러 만든 <b>대각선 구도</b>로 보고 재지 않으므로, 대각선이 많은 사진도 감점하지 않아요.</li>

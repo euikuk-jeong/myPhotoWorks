@@ -32,7 +32,7 @@ IDEAL_MEAN = 118.0
 BLUR_ABS = 30.0                # subject sharpness below this is flagged as blur
 BLUR_REL = 0.6                 # ...or below this share of the group's best
 DEFAULT_WEIGHTS = (0.5, 0.3, 0.2)   # legacy baseline weights
-ALGORITHM_VERSION = "v2-stage3.1"  # recorded in exported labels; bump when scoring changes
+ALGORITHM_VERSION = "v2-stage3.2"  # recorded in exported labels; bump when scoring changes
 
 SHARP_TOP_PERCENT = 2.0        # share of strongest edge pixels averaged for subject sharpness
 SHARP_GRAD_CEIL = 150.0        # gradient (grey levels / px at half resolution) mapped to 100

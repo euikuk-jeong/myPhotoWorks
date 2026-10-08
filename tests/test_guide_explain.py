@@ -47,6 +47,15 @@ def test_guide_points_to_the_method_button(html):
     assert "[추천 방식]" in html
 
 
+def test_guide_says_a_missed_face_is_not_a_missing_face(html):
+    assert "얼굴 인식 안 됨" in html
+    assert "<td>얼굴 없음</td>" not in html and "“얼굴 없음”" not in html
+
+
+def test_guide_explains_the_tiled_face_search(html):
+    assert "겹치는 조각" in html and "신뢰도가 낮은 결과" in html
+
+
 def test_guide_describes_the_diverging_bars(html):
     assert "추천 사진을 가운데 선" in html
     for word in ("오른쪽(초록)", "왼쪽(주황)", "회색", "④ 점수 막대"):
