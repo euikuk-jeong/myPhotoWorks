@@ -159,13 +159,13 @@ def _review(qtbot, tmp_path, sharp_exposure_color, sensitivity=1.0):
     return win, photos
 
 
-def test_detail_bars_are_relative_to_the_group_best_per_criterion(qtbot, tmp_path):
+def test_detail_bars_are_drawn_against_the_recommended_photo_per_criterion(qtbot, tmp_path):
     win, photos = _review(qtbot, tmp_path, [(80, 40, 60), (40, 80, 30)])
     win._strip.setCurrentRow(1)
     assert len(win._bars) == 3
-    assert [bar.value() for bar in win._bars] == [50, 100, 50]
+    assert [bar.value() for bar in win._bars] == [-100, 100, -75]
     win._strip.setCurrentRow(0)
-    assert [bar.value() for bar in win._bars] == [100, 50, 100]
+    assert [bar.value() for bar in win._bars] == [0, 0, 0]
 
 
 def test_detail_panel_has_no_composite_total_and_shows_sensitivity(qtbot, tmp_path):
@@ -180,11 +180,14 @@ def test_detail_panel_has_no_composite_total_and_shows_sensitivity(qtbot, tmp_pa
 def test_detail_panel_names_the_deciding_criterion_and_marks_tied_ones(qtbot, tmp_path):
     win, _ = _review(qtbot, tmp_path, [(80.0, 40, 60), (79.5, 85, 60)])
     win._strip.setCurrentRow(1)
-    assert "주제 노출 우세" in win._reason_label.text()
+    assert "주제 노출이 가장 적정해요" in win._reason_label.text()
     names = [lbl.text() for lbl in win.findChildren(QLabel)]
     assert any("≈" in t for t in names)                     # sharpness row is a tie
 
 
 def test_detail_panel_says_negligible_difference_when_everything_ties(qtbot, tmp_path):
     win, _ = _review(qtbot, tmp_path, [(80.0, 70.0, 60.0), (80.4, 70.3, 60.2)])
+    win._strip.setCurrentRow(1)                              # the tiebreak picks the second photo
     assert "차이 미미" in win._reason_label.text()
+    win._strip.setCurrentRow(0)
+    assert "차이는 작지만" in win._reason_label.text()

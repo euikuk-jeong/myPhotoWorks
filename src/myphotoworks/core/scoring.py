@@ -32,7 +32,7 @@ IDEAL_MEAN = 118.0
 BLUR_ABS = 30.0                # subject sharpness below this is flagged as blur
 BLUR_REL = 0.6                 # ...or below this share of the group's best
 DEFAULT_WEIGHTS = (0.5, 0.3, 0.2)   # legacy baseline weights
-ALGORITHM_VERSION = "v2-stage3.1"  # recorded in exported labels; bump when scoring changes
+ALGORITHM_VERSION = "v2-stage3.2"  # recorded in exported labels; bump when scoring changes
 
 SHARP_TOP_PERCENT = 2.0        # share of strongest edge pixels averaged for subject sharpness
 SHARP_GRAD_CEIL = 150.0        # gradient (grey levels / px at half resolution) mapped to 100
@@ -54,6 +54,9 @@ class QualityScores:
     # subject box in the pixel-normalised analysis copy, so a correction change can re-measure
     # the subject's exposure without detecting the subject (or decoding) again
     subject_bbox: tuple[int, int, int, int] | None = None
+    # (width, height) of that analysis copy: lets the review preview draw the boxes as shares of
+    # the frame (core/explain); None for scores that were not measured by ``score_images``
+    analysis_size: tuple[int, int] | None = None
     # main faces of the photo (same pixel grid as ``subject_bbox``); None = no portrait
     faces: FaceSummary | None = None
     # degrees the dominant lines are off the axes (see core/composition); None = no clear lines
@@ -219,6 +222,7 @@ def score_images(
         subject_source=region.source,
         motion_ratio=motion_ratio(gray, region),
         subject_bbox=region.bbox,
+        analysis_size=small.size,
         faces=_face_summary(gray, gray_corrected, grid) if grid else None,
         tilt=estimate_tilt(gray),
     )

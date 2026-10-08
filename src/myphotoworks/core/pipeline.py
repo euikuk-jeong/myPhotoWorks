@@ -15,6 +15,7 @@ from myphotoworks.core.analysis_image import (
     face_crops,
     load_analysis_image,
 )
+from myphotoworks.core.face_detect import detect_faces
 from myphotoworks.core.faces import Box, FaceEngine, select_main_faces
 from myphotoworks.core.grouping import ExifHints
 from myphotoworks.core.scoring import QualityScores, score_images
@@ -36,21 +37,18 @@ def analyze_faces(
 ) -> list[tuple[Box, Mapping[str, float] | None]]:
     """Main faces of a photo as ``(box in the pixels of raw, blendshapes or None)``.
 
-    Two stages: the detector looks at the small analysis copy; only photos with a main face
-    cost a second decode of the faces from the original for the landmarker, which is told where
-    each face is inside its crop. A detector or decode failure means "no faces" for this photo
-    (logged); a landmarker failure only leaves that face's blendshapes unknown (``None``: eyes
-    open, neutral) - the detected face stays. The analysis itself never fails because of faces.
+    Two stages: the detector looks at the small analysis copy and, when that is not conclusive,
+    at tiles of a larger decode (``core/face_detect``: small faces, no false ones); only photos
+    with a main face cost a second decode of the faces from the original for the landmarker,
+    which is told where each face is inside its crop. A detector or decode failure means "no
+    faces" for this photo (logged); a landmarker failure only leaves that face's blendshapes
+    unknown (``None``: eyes open, neutral) - the detected face stays. The analysis itself never
+    fails because of faces.
     """
     if engine is None:
         return []
     try:
-        w, h = raw.size
-        boxes = []
-        for x0, y0, x1, y1 in engine.detect(np.asarray(raw)):
-            box = (max(0, x0), max(0, y0), min(w, x1), min(h, y1))
-            if box[2] > box[0] and box[3] > box[1]:
-                boxes.append(box)
+        boxes = detect_faces(path, raw, engine)
         main = select_main_faces(boxes, raw.size)
         crops = face_crops(path, main, raw.size)            # one decode for all faces
     except Exception as e:

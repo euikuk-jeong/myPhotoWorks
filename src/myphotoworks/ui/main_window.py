@@ -568,9 +568,13 @@ class MainWindow(QMainWindow):
             return
         from myphotoworks.ui.group_review_window import GroupReviewWindow
 
-        win = GroupReviewWindow(self._session, self._settings)
+        win = GroupReviewWindow(
+            self._session, self._settings,
+            show_subject_box=bool(self._cfg.get("review_show_subject_box", True)),
+        )
         win.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
         win.changed.connect(self._on_review_window_changed)
+        win.subject_box_toggled.connect(self._on_subject_box_toggled)
         win.destroyed.connect(lambda _o=None: setattr(self, "_review_win", None))
         self._review_win = win
         win.show()
@@ -596,6 +600,11 @@ class MainWindow(QMainWindow):
             self, "내보내기 완료",
             f"그룹 {len(label['groups']):,}개 중 검토된 {used:,}개가 라벨로 유효합니다.\n{path}",
         )
+
+    def _on_subject_box_toggled(self, visible: bool) -> None:
+        """The review window's "측정 영역 보기" is a view preference: kept in the config (saved
+        when the app closes), not in AppSettings, whose panel works on its own copy."""
+        self._cfg["review_show_subject_box"] = bool(visible)
 
     def _on_review_window_changed(self) -> None:
         self._thumb_panel.rebuild()

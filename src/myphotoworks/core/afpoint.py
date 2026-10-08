@@ -22,6 +22,7 @@ _FOCUS_AUTO = 0
 class FujiFocus:
     af: bool                                  # FocusMode is Auto
     pixel: tuple[int, int] | None = None      # FocusPixel, None when missing or (0, 0)
+    mode: int | None = None                   # the raw FocusMode value (for the debug export)
 
 
 def parse_fuji_focus(makernote: bytes) -> FujiFocus | None:
@@ -49,7 +50,7 @@ def parse_fuji_focus(makernote: bytes) -> FujiFocus | None:
                 pixel = struct.unpack_from("<HH", makernote, pos + 8)
         if mode is None:
             return None
-        return FujiFocus(mode == _FOCUS_AUTO, pixel if pixel and pixel != (0, 0) else None)
+        return FujiFocus(mode == _FOCUS_AUTO, pixel if pixel and pixel != (0, 0) else None, mode)
     except (struct.error, ValueError):
         return None
 

@@ -75,14 +75,22 @@ def test_no_detection_means_no_faces_and_the_landmarker_is_never_called(tmp_path
     engine = FakeFaceEngine(boxes=[])
     s = _analyze(_jpeg(tmp_path, shallow_dof(seed=5)), engine).scores
     assert s.faces is None and s.subject_source == "sharpest"
-    assert len(engine.detect_shapes) == 1 and engine.crop_sizes == []
+    assert engine.crop_sizes == []
+    # the 512 px copy first, then (nothing was sure) the nine tiles of the larger decode
+    assert len(engine.detect_shapes) == 10
 
 
 def test_the_detector_sees_the_512px_analysis_copy(tmp_path):
     engine = FakeFaceEngine(boxes=[])
     _analyze(_big_jpeg(tmp_path), engine)
-    assert engine.detect_shapes == [(384, 512, 3)]            # an RGB array, long side 512
-    assert engine.detect_dtypes == ["uint8"]
+    assert engine.detect_shapes[0] == (384, 512, 3)           # an RGB array, long side 512
+    assert set(engine.detect_dtypes) == {"uint8"}
+
+
+def test_a_confident_detection_on_the_512px_copy_needs_no_tiles(tmp_path):
+    engine = FakeFaceEngine(boxes=[FACE], shapes=[blend()])
+    _analyze(_big_jpeg(tmp_path), engine)
+    assert engine.detect_shapes == [(384, 512, 3)]
 
 
 def test_the_landmarker_gets_a_crop_decoded_at_higher_resolution_than_the_512px_copy(tmp_path):

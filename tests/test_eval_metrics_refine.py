@@ -42,7 +42,8 @@ def _evaluate(labels, **kw):
 def test_algorithm_version_marks_the_stage_three_refinement():
     from myphotoworks.core.scoring import ALGORITHM_VERSION
 
-    assert ALGORITHM_VERSION == "v2-stage3.1"
+    # 3.1: tilt range and person-chain gate; 3.2: faces are found in tiles (core/face_detect)
+    assert ALGORITHM_VERSION == "v2-stage3.2"
 
 
 # ---- sessions are counted once ---------------------------------------------------------------

@@ -88,6 +88,53 @@ def status_badge_rect(photo_rect: QRect, text_width: int, blur_shown: bool) -> Q
     return QRect(photo_rect.left() + 5, bottom, max(32, text_width + 12), 16)
 
 
+MAX_FACT_BADGES = 2           # fact badges drawn on a card; the rest is counted ("+2")
+_BADGE_H = 16
+_BADGE_STEP = 18              # one badge row plus a 2 px gap
+_BADGE_MARGIN = 5
+_BADGE_TOP_RESERVE = 26       # the star and the checkbox own the photo's top edge
+
+
+def visible_fact_badges(facts) -> list[str]:
+    """Texts of the badges to draw for a photo's facts. "흐림" keeps its own badge at the
+    bottom-left and is not repeated; beyond ``MAX_FACT_BADGES`` the rest is counted."""
+    shown = [f for f in facts if f != "흐림"]
+    if len(shown) <= MAX_FACT_BADGES:
+        return shown
+    return shown[:MAX_FACT_BADGES] + [f"+{len(shown) - MAX_FACT_BADGES}"]
+
+
+def fact_badge_rects(
+    photo_rect: QRect, widths, avoid=()
+) -> list[QRect | None]:
+    """Where the fact badges go: a stack in the photo's bottom-right corner, right-aligned,
+    first one on the row of the blur / status badge, the next ones above it. A badge that would
+    touch one of the ``avoid`` rects (the left-side badges on a narrow portrait photo) or an
+    earlier badge moves up a row; one that no longer fits below the star / checkbox row gets
+    ``None``. Widths are cut to the photo's width."""
+    max_w = max(1, photo_rect.width() - 2 * _BADGE_MARGIN)
+    top_limit = photo_rect.top() + _BADGE_TOP_RESERVE
+    taken = list(avoid)
+    rects: list[QRect | None] = []
+    for width in widths:
+        width = min(width, max_w)
+        rect = None
+        row = 0
+        while True:
+            y = photo_rect.bottom() - 21 - row * _BADGE_STEP
+            if y < top_limit:
+                break
+            candidate = QRect(photo_rect.right() - _BADGE_MARGIN - width + 1, y, width, _BADGE_H)
+            if not any(candidate.intersects(other) for other in taken):
+                rect = candidate
+                break
+            row += 1
+        rects.append(rect)
+        if rect is not None:
+            taken.append(rect)
+    return rects
+
+
 class _LoaderSignals(QObject):
     loaded = pyqtSignal(str, QImage, int, int)   # path, thumbnail, original width, height
 
@@ -155,12 +202,14 @@ class _CardDelegate(QStyledItemDelegate):
         painter.save()
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         status = status_badge(photo.status)
+        left_badges: list[QRect] = []     # the fact badges on the right keep clear of these
         if status is not None:
             text, color = status
             blur_shown = self._panel.grouping_active and "흐림" in photo.reason
             badge = status_badge_rect(
                 r, painter.fontMetrics().horizontalAdvance(text), blur_shown
             )
+            left_badges.append(badge)
             painter.setPen(Qt.PenStyle.NoPen)
             painter.setBrush(tokens.color(color, 230))
             painter.drawRoundedRect(badge, 4, 4)
@@ -204,12 +253,36 @@ class _CardDelegate(QStyledItemDelegate):
 
         if "흐림" in photo.reason:
             badge = QRect(r.left() + 5, r.bottom() - 21, 32, 16)
+            left_badges.append(badge)
             painter.setPen(Qt.PenStyle.NoPen)
             painter.setBrush(tokens.color(tokens.WARN, 230))
             painter.drawRoundedRect(badge, 4, 4)
             painter.setPen(QColor(tokens.ON_PRIMARY))
             painter.drawText(badge, Qt.AlignmentFlag.AlignCenter, "흐림")
+        if getattr(self._panel, "show_reason", True):     # "추천 이유 표시" also covers these
+            self._paint_fact_badges(painter, r, photo.facts, left_badges)
         painter.restore()
+
+    @staticmethod
+    def _paint_fact_badges(painter: QPainter, photo_rect: QRect, facts, avoid) -> None:
+        """Facts about the photo (눈 감음 N명, 기울어짐 ...) as badges in the bottom-right
+        corner, same look as the "흐림" badge; the "+N" for the cut-off rest is muted."""
+        texts = visible_fact_badges(facts)
+        if not texts:
+            return
+        metrics = painter.fontMetrics()
+        widths = [max(24, metrics.horizontalAdvance(t) + 12) for t in texts]
+        for text, rect in zip(texts, fact_badge_rects(photo_rect, widths, avoid), strict=True):
+            if rect is None:
+                continue
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(tokens.color(tokens.TEXT_MUTED if text.startswith("+")
+                                          else tokens.WARN, 230))
+            painter.drawRoundedRect(rect, 4, 4)
+            painter.setPen(QColor(tokens.ON_PRIMARY))
+            painter.drawText(rect, Qt.AlignmentFlag.AlignCenter,
+                             metrics.elidedText(text, Qt.TextElideMode.ElideRight,
+                                                rect.width() - 8))
 
 
 class ThumbnailPanel(QListWidget):

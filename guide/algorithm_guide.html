@@ -191,7 +191,7 @@ footer{margin-top:60px;color:var(--muted);font-size:14px;border-top:1px solid va
 <p>사진 아래 또는 그룹 제목에 이유가 표시됩니다(그룹 탭 “추천 이유 표시”로 켜고 끔). 결정 기준을 알려주는 말이라 ★를 단 사진에만 붙어요.</p>
 <table><tr><th>사진</th><th>표시되는 이유</th></tr>
 <tr><td>IMG_0431</td><td>주제 노출 우세</td></tr><tr><td>IMG_0432</td><td>(없음)</td></tr><tr><td>IMG_0433</td><td>흐림</td></tr></table>
-<p class="cap">“주제 선명도 우세” · “주제 노출 우세” · “색감 우세” · “차이 미미” · “단독 사진”(그룹에 1장뿐) 중 하나가 붙고, “흐림”은 선명도 30점 미만이거나 그룹 최고 선명도의 60% 미만일 때 따로 붙어요. 리뷰 창의 점수 패널에서는 기준마다 그룹 최고를 100으로 본 막대가 보이고, 결정 기준은 굵게, 동점이라 승부가 안 난 기준은 “≈”로 표시됩니다.</p><h3>민감도를 바꾸면 추천이 바뀌어요</h3>
+<p class="cap">“주제 선명도 우세” · “주제 노출 우세” · “색감 우세” · “차이 미미” · “단독 사진”(그룹에 1장뿐) 중 하나가 붙고, “흐림”은 선명도 30점 미만이거나 그룹 최고 선명도의 60% 미만일 때 따로 붙어요. 리뷰 창의 점수 패널에서는 기준마다 추천 사진을 가운데 선으로 두고 비교한 막대(좋으면 오른쪽, 나쁘면 왼쪽)가 보이고, 결정 기준은 굵게, 동점이라 승부가 안 난 기준은 “≈”로 표시됩니다.</p><h3>민감도를 바꾸면 추천이 바뀌어요</h3>
 <div class="example"><span class="tag">예제 5</span><b>“조금 더 또렷한 사진” vs “노출이 훨씬 좋은 사진”</b>
 <div class="two" style="margin-top:8px"><div class="scorecard"><div class="sc-title">사진 1 (선명도 92 · 노출 55)</div><div class="cap">선명도가 8.7% 높음</div></div><div class="scorecard"><div class="sc-title">사진 2 (선명도 84 · 노출 90)</div><div class="cap">노출이 35점 높음</div></div></div>
 <table style="margin-top:8px"><tr><th>민감도</th><th>선명도 동점 범위</th><th>결과</th></tr>
@@ -200,7 +200,7 @@ footer{margin-top:60px;color:var(--muted);font-size:14px;border-top:1px solid va
 <tr><td>높음 (×0.6)</td><td>6% 이내</td><td>8.7% 차이는 의미 있음 → 선명도로 <b>사진 1</b></td></tr></table></div>
 <p>그룹 탭 “추천 민감도 (고급)”에서 고릅니다. <b>높을수록</b> 작은 차이도 승부로 보고, <b>낮을수록</b> “차이 미미”가 늘어납니다. 바꾸면 사진을 다시 읽지 않고 <b>즉시</b> 추천이 갱신되고, 내가 직접 채택을 바꾼 그룹은 <b>내 선택을 유지</b>하며 ★ 표시만 새로 바뀝니다.</p>
 <h3>사람 사진은 얼굴로 비교해요</h3>
-<p>그룹에 <b>얼굴이 보이는 사진이 한 장이라도 있으면 “인물 그룹”</b>으로 보고, 위 표 대신 얼굴 기준으로 비교합니다. 얼굴은 Google <b>MediaPipe</b> 모델로 이 컴퓨터 안에서 찾으며(사진을 밖으로 보내지 않아요), 얼굴이 있는 사진만 원본에서 얼굴 부분을 다시 읽어 눈·입 모양을 자세히 봅니다.</p>
+<p>그룹에 <b>얼굴이 보이는 사진이 한 장이라도 있으면 “인물 그룹”</b>으로 보고, 위 표 대신 얼굴 기준으로 비교합니다. 얼굴은 Google <b>MediaPipe</b> 모델로 이 컴퓨터 안에서 찾으며(사진을 밖으로 보내지 않아요), 사진 전체에서 확신이 서지 않으면 사진을 겹치는 조각으로 나눠 작은 얼굴도 다시 찾고 신뢰도가 낮은 결과(전시 패널·그림자 같은 얼굴 아닌 것)는 버립니다. 얼굴이 있는 사진만 원본에서 얼굴 부분을 다시 읽어 눈·입 모양을 자세히 봅니다.</p>
 <ul><li><b>주요 인물</b>은 가장 큰 얼굴 면적의 25% 이상인 얼굴입니다. 배경에 작게 찍힌 행인은 세지 않아요.</li>
 <li>가장 큰 얼굴도 사진 폭의 3%보다 좁으면 인물 사진이 아닌 것으로 봅니다. 풍경 속에 작게 찍힌 사람 때문에 풍경 사진이 인물 그룹이 되지 않게 하기 위해서예요.</li>
 <li><b>눈 감음</b>: 두 눈 중 한쪽이라도 깜빡임 수치가 <b>0.50 이상</b>이면 감은 것으로 셉니다. 사진마다 “주요 인물 중 눈 감은 사람 수”를 구해요.</li>
@@ -219,11 +219,11 @@ footer{margin-top:60px;color:var(--muted);font-size:14px;border-top:1px solid va
 <table><tr><th>배지</th><th>뜻</th></tr>
 <tr><td>눈 감음 적음 · 웃음 우세 · 얼굴 선명도 우세 · 얼굴 노출 우세 · 얼굴 인식 우세</td><td>★ 사진에 붙는 <b>결정 기준</b></td></tr>
 <tr><td>눈 감음 N명</td><td>인물 그룹에서 눈 감은 사람이 있는 사진 (★가 아니어도 표시)</td></tr>
-<tr><td>얼굴 없음</td><td>인물 그룹인데 이 사진에서는 주요 얼굴을 찾지 못함</td></tr></table>
+<tr><td>얼굴 인식 안 됨</td><td>인물 그룹인데 이 사진에서는 주요 얼굴을 찾지 못함 (얼굴이 없다는 뜻이 아니라 프로그램이 인식하지 못했다는 뜻이에요)</td></tr></table>
 <div class="example"><span class="tag">예제 6</span><b>단체 사진 3장 중 추천은?</b>
 <div class="three" style="margin-top:8px"><div class="scorecard"><div class="sc-title">IMG_0501</div><div class="barrow"><span class="barlabel">눈 감음</span><span class="bartrack"><span class="barfill" style="width:50%;background:var(--bad)"></span></span><span class="barval">1명</span><span class="barnote"></span></div><div class="barrow"><span class="barlabel">웃음</span><span class="bartrack"><span class="barfill" style="width:100%;background:var(--good)"></span></span><span class="barval">85%</span><span class="barnote"></span></div><div class="barrow"><span class="barlabel">얼굴 선명도</span><span class="bartrack"><span class="barfill" style="width:100%;background:var(--accent)"></span></span><span class="barval">90</span><span class="barnote"></span></div><div class="barrow"><span class="barlabel">얼굴 노출</span><span class="bartrack"><span class="barfill" style="width:100%;background:var(--warn)"></span></span><span class="barval">82</span><span class="barnote"></span></div></div><div class="scorecard win"><div class="sc-title">IMG_0502 <span class="star">★ 추천</span></div><div class="barrow"><span class="barlabel">눈 감음</span><span class="bartrack"><span class="barfill" style="width:100%;background:var(--bad)"></span></span><span class="barval">0명</span><span class="barnote">결정</span></div><div class="barrow"><span class="barlabel">웃음</span><span class="bartrack"><span class="barfill" style="width:47%;background:var(--good)"></span></span><span class="barval">40%</span><span class="barnote"></span></div><div class="barrow"><span class="barlabel">얼굴 선명도</span><span class="bartrack"><span class="barfill" style="width:89%;background:var(--accent)"></span></span><span class="barval">80</span><span class="barnote"></span></div><div class="barrow"><span class="barlabel">얼굴 노출</span><span class="bartrack"><span class="barfill" style="width:95%;background:var(--warn)"></span></span><span class="barval">78</span><span class="barnote"></span></div></div><div class="scorecard"><div class="sc-title">IMG_0503</div><div class="cap">모두 뒤돌아봐서 얼굴을 찾지 못함</div></div></div>
 <p style="margin-top:10px">① 얼굴 인식: IMG_0503은 얼굴이 없어 뒤로 밀립니다. ② 눈 감음: IMG_0501은 3명 중 1명이 감았고 IMG_0502는 0명 → <b>IMG_0502 승</b>, 눈 감음이 결정 기준입니다. IMG_0501이 더 활짝 웃고 더 선명해도 눈 감음이 먼저라 그 기준까지 가지 않아요.</p>
-<p>표시되는 배지: IMG_0502 “눈 감음 적음”, IMG_0501 “눈 감음 1명”, IMG_0503 “얼굴 없음”.</p></div>
+<p>표시되는 배지: IMG_0502 “눈 감음 적음”, IMG_0501 “눈 감음 1명”, IMG_0503 “얼굴 인식 안 됨”.</p></div>
 <h3>구도 — 기울기와 얼굴 잘림</h3>
 <p>선명도·노출이 비슷한 사진끼리는 <b>구도</b>를 비교합니다. 구도 점수는 100점에서 시작해 감점되는 방식이에요. 전체 균형이나 삼분할 같은 것은 보지 않고, 두 가지만 봅니다.</p>
 <ul><li><b>수평(기울기)</b>: 수평선·건물·창틀처럼 뚜렷한 직선이 한 방향으로 모여 있을 때, 그 직선이 가로·세로에서 얼마나 기울었는지 잽니다. 1° 이하는 감점이 없고, 그보다 기울면 1°당 6점씩 감점돼요(최대 60점). 뚜렷한 직선이 없는 사진(숲·물결 등)은 기울기를 재지 않습니다. 가로·세로에서 15° 넘게 기울어진 직선은 계단·지붕·레일처럼 일부러 만든 <b>대각선 구도</b>로 보고 재지 않으므로, 대각선이 많은 사진도 감점하지 않아요.</li>
@@ -241,7 +241,18 @@ footer{margin-top:60px;color:var(--muted);font-size:14px;border-top:1px solid va
 <div class="card"><h3>✔ 채택</h3><p><b>내가 결정한</b> 사진. 처음엔 추천과 같지만, 체크박스(또는 Space 키)로 <b>여러 장</b>을 자유롭게 채택할 수 있어요.</p></div></div>
 <div class="callout tip"><b class="t">채택한 사진만 처리하려면</b> 메인 화면의 <b>[채택만 보기]</b>를 켜세요. 화면에 보이는 사진 = 미리보기·일괄 적용 대상이라
 <b>[일괄 적용 (N장)]</b>의 N이 처리될 장수예요. 끄면 전체 사진이 대상입니다.</div>
-<div class="callout"><b class="t">선택 기록</b> 그룹 리뷰 창을 닫을 때 “추천 사진”과 “내가 채택한 사진”이 이 컴퓨터에만 기록됩니다(사용자 폴더의 .myphotoworks/selection_logs). 사진은 저장하지 않고 사진 폴더 경로·파일 이름·선택 결과만 남기며, 나중에 추천 방식을 내 취향에 맞게 다듬을 때 참고하는 용도예요. 같은 그룹핑 결과는 기록 파일 하나를 갱신하므로 리뷰 창을 여러 번 열고 닫아도 기록이 겹쳐 쌓이지 않아요. 그룹 탭의 “선택 기록 저장”으로 언제든 끌 수 있습니다.</div><h2 id="tune"><span class="num">6</span>결과가 마음에 안 들 때</h2><table><tr><th>이런 증상이 보이면</th><th>이렇게 해보세요</th></tr>
+<div class="callout"><b class="t">선택 기록</b> 그룹 리뷰 창을 닫을 때 “추천 사진”과 “내가 채택한 사진”이 이 컴퓨터에만 기록됩니다(사용자 폴더의 .myphotoworks/selection_logs). 사진은 저장하지 않고 사진 폴더 경로·파일 이름·선택 결과만 남기며, 나중에 추천 방식을 내 취향에 맞게 다듬을 때 참고하는 용도예요. 같은 그룹핑 결과는 기록 파일 하나를 갱신하므로 리뷰 창을 여러 번 열고 닫아도 기록이 겹쳐 쌓이지 않아요. 그룹 탭의 “선택 기록 저장”으로 언제든 끌 수 있습니다.</div><h3 id="reading">리뷰 창에서 “왜 이 사진?” 읽는 법</h3>
+<p>그룹 리뷰 창은 추천 이유를 세 군데에서 보여 줍니다. 모두 위에서 설명한 기준 순서를 그대로 옮긴 것이라, 화면의 문장과 수치로 추천을 직접 확인할 수 있어요.</p>
+<div class="two"><div class="card"><h3>① 한 문장 요약</h3><p>사진을 고르면 미리보기 아래 첫 줄에 이유가 나와요.</p>
+<div class="example"><span class="tag">추천 사진</span> 주제 선명도가 가장 높아요 — 71점, 다음 사진(DSCF9025)은 53점</div>
+<div class="example"><span class="tag">그 밖의 사진</span> 추천 사진(DSCF9026)보다 주제 노출 점수가 낮아요 — 61점 vs 82점</div>
+<p>문장에 마우스를 올리면 <b>단계별</b> 비교 과정(예: “1. 주제 선명도: 3장 중 2장 남음 (허용폭 10%)”)이 나오고, 그 아래 흐린 글씨에는 눈 감음·얼굴 잘림·기울어짐·흐림처럼 <b>사진 자체의 사실</b>이 나와요.</p></div>
+<div class="card"><h3>② 측정 영역 박스</h3><p>점수를 잰 영역을 사진 위에 박스로 보여 줘요. 체크박스 <b>[측정 영역 보기]</b>로 끄고 켤 수 있어요.</p>
+<p><span class="chip acc">파랑</span> 얼굴 · <span class="chip warn">노랑</span> AF 포인트 · <span class="chip good">초록</span> 가장 선명한 영역 · <span class="chip">회색 점선</span> 중앙(주제를 찾지 못해 중앙을 썼어요)</p>
+<p>얼굴이 여러 명이면 얼굴마다 박스를 그리고 글자는 하나만(예: “얼굴 2명”) 붙여요.</p></div></div>
+<div class="card"><h3>③ 썸네일의 사실 배지</h3><p>썸네일 오른쪽 아래에 <span class="chip warn">눈 감음 1명</span> <span class="chip warn">얼굴 잘림 1명</span> <span class="chip warn">기울어짐</span> 같은 배지가 나와요. 최대 2개까지만 보이고 나머지는 <span class="chip">+N</span>으로 줄어요(전체는 마우스를 올리면 보여요). 왼쪽 아래의 <span class="chip warn">흐림</span> 배지는 그대로예요. 그룹 탭의 <b>“추천 이유 표시”</b>를 끄면 이 배지들도 함께 숨겨져요.</p></div>
+<div class="card"><h3>④ 점수 막대</h3><p>오른쪽 점수 패널의 막대는 <b>추천 사진을 가운데 선</b>으로 두고 비교해요. 추천보다 좋으면 <b>오른쪽(초록)</b>, 나쁘면 <b>왼쪽(주황)</b>으로 뻗고, 차이가 허용폭 안이면 <b>회색</b>의 짧은 막대예요. 추천 사진을 고르면 모든 막대가 가운데에 있어요(그 사진이 기준이라서요).</p></div>
+<div class="callout tip"><b class="t">어떤 순서로 비교했는지 궁금하면</b> 리뷰 창의 <b>[추천 방식]</b> 버튼을 누르세요. 이 그룹(인물 그룹 또는 일반 그룹)이 쓰는 기준 순서와 허용폭, 동점 규칙을 지금 추천 민감도에 맞춰 보여 주고, “이 그룹에서는” 단계마다 어떤 사진이 남았는지도 보여 줘요.</div><h2 id="tune"><span class="num">6</span>결과가 마음에 안 들 때</h2><table><tr><th>이런 증상이 보이면</th><th>이렇게 해보세요</th></tr>
 <tr><td>그룹이 너무 <b>잘게 쪼개져요</b> (같은 장면인데 따로)</td><td>유사도 슬라이더를 <b>너그럽게(오른쪽)</b>로 · 필름 스캔이면 “떨어져 있는 같은 장면도 묶기” 켜기</td></tr>
 <tr><td>다른 장면이 <b>한 그룹에 섞여요</b></td><td>슬라이더를 <b>깐깐하게(왼쪽)</b>로 · 그룹핑 방식을 “유사도만”으로</td></tr>
 <tr><td>연사인데 한 순간이 여러 그룹으로 나뉘어요</td><td>그룹핑 방식 “시각 우선” + 시각 간격을 늘리기</td></tr>

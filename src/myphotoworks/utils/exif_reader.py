@@ -221,6 +221,63 @@ def read_af_point(path: Path) -> tuple[float, float] | None:
         return None
 
 
+def read_af_debug(path: Path) -> dict:
+    """Why a photo has, or has no, AF point (developer export): the raw Fujifilm values and the
+    first check of ``read_af_point`` that failed. Never raises; ``af_point`` equals
+    ``read_af_point``."""
+    info: dict = {"make": None, "focus_mode": None, "focus_pixel": None, "exif_size": None,
+                  "actual_size": None, "orientation": None, "af_point": None, "reason": ""}
+    try:
+        exif_data = piexif.load(str(path))
+    except Exception:
+        info["reason"] = "EXIF를 읽지 못함"
+        return info
+    try:
+        ifd0, exif_ifd = exif_data.get("0th", {}), exif_data.get("Exif", {})
+        make = _decode(ifd0.get(piexif.ImageIFD.Make, b""))
+        info["make"] = make or None
+        info["orientation"] = ifd0.get(piexif.ImageIFD.Orientation)
+        if make.upper() != "FUJIFILM":
+            info["reason"] = "Fujifilm이 아님"
+            return info
+        note = exif_ifd.get(piexif.ExifIFD.MakerNote)
+        focus = parse_fuji_focus(note) if isinstance(note, bytes) else None
+        if focus is None:
+            info["reason"] = "MakerNote를 읽지 못함"
+            return info
+        info["focus_mode"] = focus.mode
+        info["focus_pixel"] = list(focus.pixel) if focus.pixel else None
+        if not focus.af:
+            info["reason"] = "수동 초점(또는 동영상)"
+            return info
+        if focus.pixel is None:
+            info["reason"] = "초점 좌표 없음"
+            return info
+        size = (exif_ifd.get(piexif.ExifIFD.PixelXDimension),
+                exif_ifd.get(piexif.ExifIFD.PixelYDimension))
+        if not all(isinstance(v, int) and v > 0 for v in size):
+            info["reason"] = "EXIF 픽셀 크기 없음"
+            return info
+        info["exif_size"] = list(size)
+        from PIL import Image
+
+        with Image.open(path) as img:
+            actual = img.size
+        info["actual_size"] = list(actual)
+        if abs((actual[0] / actual[1]) / (size[0] / size[1]) - 1.0) > _ASPECT_TOLERANCE:
+            info["reason"] = "잘린(크롭) 사진"
+            return info
+        point = normalize_focus_point(focus.pixel, size, info["orientation"])
+        if point is None:
+            info["reason"] = "초점 좌표가 프레임 밖"
+            return info
+        info["af_point"] = list(point)
+        info["reason"] = "사용 가능"
+    except Exception:
+        info["reason"] = "AF 정보를 해석하지 못함"
+    return info
+
+
 def read_hints(path: Path):
     """Return ExifHints (focal length, lens model, f-number, AF point) — values may be None."""
     from myphotoworks.core.grouping import ExifHints

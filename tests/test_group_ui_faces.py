@@ -57,19 +57,20 @@ def test_person_group_shows_the_four_person_rows_and_no_subject_rows(qtbot, tmp_
     assert not any(w in n for n in names for w in ("주제", "색감"))
 
 
-def test_person_bars_are_relative_to_the_group_best(qtbot, tmp_path):
+def test_person_bars_are_drawn_against_the_recommended_photo(qtbot, tmp_path):
     win, _ = _review(qtbot, tmp_path, [person(smile=0.8, face_sharp=80, face_exposure=40),
                                        person(smile=0.4, face_sharp=40, face_exposure=80)])
     win._strip.setCurrentRow(1)
-    assert _values(win) == [100, 50, 50, 100]          # nobody blinks: full eye bar
-    win._strip.setCurrentRow(0)
-    assert _values(win) == [100, 100, 100, 50]
+    # nobody blinks: the eye bar is on the centre; smile and sharpness worse, exposure better
+    assert _values(win) == [0, -80, -100, 100]
+    win._strip.setCurrentRow(0)                        # the recommended photo is the centre line
+    assert _values(win) == [0, 0, 0, 0]
 
 
 def test_detail_panel_names_the_deciding_face_criterion(qtbot, tmp_path):
     win, _ = _review(qtbot, tmp_path, [person(closed=1), person(closed=0)])
     win._strip.setCurrentRow(1)
-    assert "눈 감음 적음" in win._reason_label.text()
+    assert "눈 감은 사람이 가장 적어요" in win._reason_label.text()
 
 
 def test_tied_person_rows_are_marked_with_the_approx_sign(qtbot, tmp_path):
@@ -84,7 +85,8 @@ def test_a_faceless_photo_of_a_person_group_shows_empty_bars(qtbot, tmp_path):
     win, _ = _review(qtbot, tmp_path, [person(), scores(90, 90, 90)])
     win._strip.setCurrentRow(1)
     assert _values(win) == [0, 0, 0, 0]
-    assert "얼굴 없음" in win._reason_label.text()
+    assert win._facts_label.text() == "얼굴 인식 안 됨"     # fact line; the sentence says why
+    assert "얼굴이 인식되지 않아" in win._reason_label.text()
     assert [v.text() for v in win._bar_values if v.isVisibleTo(win)] == ["-"] * 4   # no fake "0"
 
 
