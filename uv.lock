@@ -615,7 +615,7 @@ wheels = [
 
 [[package]]
 name = "myphotoworks"
-version = "1.4.2"
+version = "1.7.0"
 source = { editable = "." }
 dependencies = [
     { name = "mediapipe" },
