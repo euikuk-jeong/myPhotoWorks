@@ -15,7 +15,8 @@ the same small face scores 0.85 - 0.97 and the false ones stay weak or vanish (d
    photo at ``TILE_LONG_SIDE`` and search ``tile_rects`` as well (a failing decode keeps the
    whole-frame result); a tile detection cut by an inner tile edge is half a face and is
    ignored (the overlapping neighbour tile has it whole);
-3. merge overlapping boxes (``nms``): the higher score wins.
+3. merge overlapping boxes (``nms``, by IoU or by one box lying mostly inside the other): the
+   higher score wins.
 
 An engine offers ``detect_scored(rgb) -> [(box, score)]``; one with only ``detect`` gives boxes
 that count as score 1.0 (so no tiles).
@@ -43,6 +44,8 @@ TILE_FRACTION = 0.5             # a tile is this share of the frame in each dire
 TILE_OVERLAP = 0.5              # neighbouring tiles overlap by this share (3 x 3 tiles)
 TILE_LONG_SIDE = 2048           # the photo is decoded this large for the tiles
 NMS_IOU = 0.3                   # boxes overlapping this much are the same face
+NMS_CONTAINMENT = 0.7           # a box this much inside another is the same face (dev9: a face
+                                # box and a face-and-neck box, IoU 0.26 but 86 % contained)
 _EDGE_MARGIN = 0.01             # "touches the tile edge": within this share of the tile size
 
 Scored = tuple[Box, float]
@@ -73,11 +76,23 @@ def box_iou(a: Box, b: Box) -> float:
     return inter / union if union > 0 else 0.0
 
 
-def nms(detections: Sequence[Scored], iou: float = NMS_IOU) -> list[Scored]:
-    """Highest score first; a box overlapping a kept one by ``iou`` or more is dropped."""
+def box_containment(a: Box, b: Box) -> float:
+    """Overlap area over the area of the smaller box: 1.0 when one box lies inside the other."""
+    iw = max(0, min(a[2], b[2]) - max(a[0], b[0]))
+    ih = max(0, min(a[3], b[3]) - max(a[1], b[1]))
+    smaller = min((a[2] - a[0]) * (a[3] - a[1]), (b[2] - b[0]) * (b[3] - b[1]))
+    return iw * ih / smaller if smaller > 0 else 0.0
+
+
+def nms(
+    detections: Sequence[Scored], iou: float = NMS_IOU, containment: float = NMS_CONTAINMENT
+) -> list[Scored]:
+    """Highest score first; a box is dropped when it overlaps a kept one by ``iou`` or more, or
+    when one of the two lies ``containment`` or more inside the other."""
     kept: list[Scored] = []
     for box, score in sorted(detections, key=lambda d: -d[1]):
-        if all(box_iou(box, k[0]) < iou for k in kept):
+        if all(box_iou(box, k[0]) < iou and box_containment(box, k[0]) < containment
+               for k in kept):
             kept.append((box, score))
     return kept
 

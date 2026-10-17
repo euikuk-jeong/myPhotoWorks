@@ -92,6 +92,7 @@ def test_the_tunables():
     assert fd.MAX_FACE_WIDTH_RATIO == 0.45
     assert (fd.TILE_FRACTION, fd.TILE_OVERLAP, fd.TILE_LONG_SIDE) == (0.5, 0.5, 2048)
     assert fd.NMS_IOU == 0.3
+    assert fd.NMS_CONTAINMENT == 0.7
 
 
 # ---- tiles and merging -------------------------------------------------------------------------
@@ -147,6 +148,61 @@ def test_nms_keeps_the_higher_score_of_overlapping_boxes_and_the_distant_ones():
 
     kept = nms([((0, 0, 10, 10), 0.8), ((1, 1, 11, 11), 0.9), ((50, 50, 60, 60), 0.7)])
     assert kept == [((1, 1, 11, 11), 0.9), ((50, 50, 60, 60), 0.7)]
+
+
+# A face box mostly inside a larger one is the same face even when the IoU is low. Real case:
+# DSCF9241 (dev9 review, 2026-10-12) had a face box and a larger one over the face and neck, so
+# the photo counted two faces. Coordinates are the exported shares x 1000.
+FACE_BOX = (416, 602, 531, 678)            # 115 x 76
+FACE_AND_NECK_BOX = (384, 613, 587, 748)   # 203 x 135: IoU 0.26, 86 % of the face box inside
+
+
+def test_containment_is_the_overlap_over_the_smaller_box():
+    from myphotoworks.core.face_detect import box_containment
+
+    assert box_containment(FACE_BOX, FACE_AND_NECK_BOX) == pytest.approx(0.855, abs=0.001)
+    assert box_containment(FACE_AND_NECK_BOX, FACE_BOX) == pytest.approx(0.855, abs=0.001)
+    assert box_containment((0, 0, 10, 10), (0, 0, 10, 10)) == pytest.approx(1.0)
+    assert box_containment((0, 0, 10, 10), (20, 20, 30, 30)) == 0.0
+    assert box_containment((0, 0, 10, 10), (10, 0, 20, 10)) == 0.0     # touching only
+    assert box_containment((0, 0, 0, 0), (0, 0, 10, 10)) == 0.0        # empty box
+
+
+@pytest.mark.parametrize("scores", [(0.9, 0.8), (0.8, 0.9)])
+def test_nms_merges_a_box_mostly_inside_another_even_with_a_low_iou(scores):
+    from myphotoworks.core.face_detect import box_iou, nms
+
+    assert box_iou(FACE_BOX, FACE_AND_NECK_BOX) < 0.3          # IoU alone keeps both
+    kept = nms([(FACE_BOX, scores[0]), (FACE_AND_NECK_BOX, scores[1])])
+    assert kept == [(FACE_BOX if scores[0] > scores[1] else FACE_AND_NECK_BOX, max(scores))]
+
+
+def test_nms_keeps_a_box_that_only_partly_overlaps_a_larger_one():
+    from myphotoworks.core.face_detect import nms
+
+    big, small = (0, 0, 100, 100), (80, 10, 130, 60)      # 40 % of the small box is inside
+    assert len(nms([(big, 0.9), (small, 0.8)])) == 2
+
+
+def test_nms_keeps_two_faces_standing_side_by_side():
+    from myphotoworks.core.face_detect import nms
+
+    left, right = (100, 100, 200, 200), (190, 105, 290, 205)     # a sliver overlaps
+    assert len(nms([(left, 0.9), (right, 0.85)])) == 2
+
+
+def test_detect_faces_counts_the_face_and_neck_box_as_one_face():
+    from pathlib import Path
+
+    from myphotoworks.core.face_detect import detect_faces
+
+    class DuplicateEngine:
+        def detect_scored(self, rgb):
+            return [(FACE_BOX, 0.9), (FACE_AND_NECK_BOX, 0.85)]
+
+    # both are confident whole-frame detections, so no tile decode (and no file) is needed
+    boxes = detect_faces(Path("missing.jpg"), Image.new("RGB", (1000, 1000)), DuplicateEngine())
+    assert boxes == [FACE_BOX]
 
 
 # ---- detect_faces ------------------------------------------------------------------------------
